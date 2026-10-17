@@ -12,8 +12,12 @@ use Illuminate\Support\Facades\Hash;
 
 class AdminUserService
 {
-    public const SUPER_ROLE = 'super';
+    public function isSuper(AdminUserModel $user): bool
+    {
+        return $user->hasRole(self::SUPER_ROLE);
+    }
 
+    public const SUPER_ROLE = 'super';
     public const ACCESS_TTL_MINUTES = 60;
 
     public const REFRESH_TTL_DAYS = 7;

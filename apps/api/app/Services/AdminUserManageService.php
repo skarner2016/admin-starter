@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\AdminUserModel;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 
@@ -33,6 +34,12 @@ class AdminUserManageService
     public function create(array $data): AdminUserModel
     {
         return DB::transaction(function () use ($data) {
+            if (in_array(self::SUPER_ROLE, $data['roles'] ?? [], true)
+                && ! $this->auth->isSuper(auth()->user())
+            ) {
+                throw new AuthorizationException('只有 super 才能分配 super 角色。');
+            }
+
             $user = AdminUserModel::query()->create([
                 'username' => $data['username'],
                 'real_name' => $data['realName'],
@@ -52,6 +59,20 @@ class AdminUserManageService
     {
         return DB::transaction(function () use ($user, $data) {
             $wasEnabled = (int) $user->status === 1;
+
+            // super 保护：非 super 不可修改 super 用户（含停用、改角色）
+            if ($user->hasRole(AdminUserService::SUPER_ROLE)
+                && ! $this->auth->isSuper(auth()->user())
+            ) {
+                throw new AuthorizationException('只有 super 才能修改 super 账号。');
+            }
+
+            // 非 super 不可把账号提升为 super
+            if (in_array(AdminUserService::SUPER_ROLE, $data['roles'] ?? [], true)
+                && ! $this->auth->isSuper(auth()->user())
+            ) {
+                throw new AuthorizationException('只有 super 才能分配 super 角色。');
+            }
 
             $user->update([
                 'username' => $data['username'],
@@ -75,6 +96,10 @@ class AdminUserManageService
 
     public function delete(AdminUserModel $user): void
     {
+        if ($user->hasRole(AdminUserService::SUPER_ROLE)) {
+            throw new AuthorizationException('super 账号不允许删除。');
+        }
+
         DB::transaction(function () use ($user) {
             $user->tokens()->delete();
             $user->syncRoles([]);

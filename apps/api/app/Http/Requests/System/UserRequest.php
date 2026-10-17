@@ -22,8 +22,8 @@ class UserRequest extends FormRequest
             'realName' => ['required', 'string', 'max:64'],
             'avatar' => ['nullable', 'string', 'max:255'],
             'password' => $isCreate
-                ? ['required', 'string', 'min:6', 'max:64']
-                : ['nullable', 'string', 'min:6', 'max:64'],
+                ? ['required', 'string', 'min:8', 'max:64', 'regex:/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/']
+                : ['nullable', 'string', 'min:8', 'max:64', 'regex:/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/'],
             'description' => ['nullable', 'string', 'max:255'],
             'status' => ['required', 'integer', 'in:0,1'],
             'roles' => ['nullable', 'array'],

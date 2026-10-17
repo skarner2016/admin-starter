@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\MenuModel;
 use App\Models\RoleModel;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -48,6 +49,12 @@ class RoleService
 
     public function update(RoleModel $role, array $data): RoleModel
     {
+        if ($role->name === AdminUserService::SUPER_ROLE
+            && ! auth()->user()->hasRole(AdminUserService::SUPER_ROLE)
+        ) {
+            throw new AuthorizationException('只有 super 才能修改 super 角色。');
+        }
+
         return DB::transaction(function () use ($role, $data) {
             $role->update([
                 'name' => $data['name'],
@@ -63,6 +70,10 @@ class RoleService
 
     public function delete(RoleModel $role): void
     {
+        if ($role->name === AdminUserService::SUPER_ROLE) {
+            throw new AuthorizationException('super 角色不允许删除。');
+        }
+
         DB::transaction(function () use ($role) {
             DB::table('admin_role_menu')->where('role_id', $role->id)->delete();
             $role->syncPermissions([]);

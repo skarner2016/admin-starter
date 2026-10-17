@@ -3,6 +3,7 @@
 namespace App\Http\Requests\System;
 
 use App\Models\RoleModel;
+use App\Services\AdminUserService;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -16,7 +17,7 @@ class RoleRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'name' => ['required', 'string', 'max:64', Rule::unique('admin_roles', 'name')->ignore($this->roleId())],
+            'name' => ['required', 'string', 'max:64', Rule::notIn([AdminUserService::SUPER_ROLE]), Rule::unique('admin_roles', 'name')->ignore($this->roleId())],
             'status' => ['required', 'integer', 'in:0,1'],
             'remark' => ['nullable', 'string', 'max:255'],
             // permissions 是菜单树勾选出来的 menu id 数组
