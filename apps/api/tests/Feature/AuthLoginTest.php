@@ -165,7 +165,8 @@ class AuthLoginTest extends TestCase
             ->getJson('/api/auth/codes')
             ->assertOk()
             ->assertJsonPath('code', 0)
-            ->assertJsonCount(9, 'data');
+            // 系统管理 3 个页面 + 部门页，各 3 个按钮权限码
+            ->assertJsonCount(12, 'data');
     }
 
     public function test_codes_returns_only_own_permissions_for_normal_role(): void
@@ -196,8 +197,9 @@ class AuthLoginTest extends TestCase
             ->assertOk()
             ->json('data');
 
-        $this->assertCount(9, $codes);
+        $this->assertCount(12, $codes);
         $this->assertContains('System:User:Create', $codes);
+        $this->assertContains('System:Dept:Create', $codes);
     }
 
     public function test_password_is_stored_hashed(): void

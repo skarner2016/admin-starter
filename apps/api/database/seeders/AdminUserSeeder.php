@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Models\AdminUserModel;
+use App\Models\DeptModel;
 use App\Models\RoleModel;
 use Illuminate\Database\Seeder;
 
@@ -19,9 +20,9 @@ class AdminUserSeeder extends Seeder
     ];
 
     private const USERS = [
-        ['username' => 'vben', 'real_name' => 'Vben', 'role' => 'super'],
-        ['username' => 'admin', 'real_name' => 'Admin', 'role' => 'admin'],
-        ['username' => 'jack', 'real_name' => 'Jack', 'role' => 'user'],
+        ['username' => 'vben', 'real_name' => 'Vben', 'role' => 'super', 'dept' => '总公司'],
+        ['username' => 'admin', 'real_name' => 'Admin', 'role' => 'admin', 'dept' => '研发部'],
+        ['username' => 'jack', 'real_name' => 'Jack', 'role' => 'user', 'dept' => '前端组'],
     ];
 
     public function run(): void
@@ -37,6 +38,7 @@ class AdminUserSeeder extends Seeder
                 [
                     'real_name' => $item['real_name'],
                     'password' => '123456',
+                    'dept_id' => DeptModel::query()->where('name', $item['dept'])->value('id'),
                     'status' => 1,
                 ],
             );

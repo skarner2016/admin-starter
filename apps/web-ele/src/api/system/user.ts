@@ -7,6 +7,10 @@ export namespace SystemUserApi {
     [key: string]: any;
     avatar?: string;
     createTime?: string;
+    /** 所属部门 id，'' 表示未分配 */
+    deptId?: string;
+    /** 所属部门名称，列表展示用 */
+    deptName?: string;
     /** 备注 */
     description?: string;
     id: string;
@@ -24,10 +28,10 @@ export namespace SystemUserApi {
  * 获取用户列表数据（分页）
  */
 async function getUserList(params: Recordable<any>) {
-  return requestClient.get<{ items: SystemUserApi.SystemUser[]; total: number }>(
-    '/system/user/list',
-    { params },
-  );
+  return requestClient.get<{
+    items: SystemUserApi.SystemUser[];
+    total: number;
+  }>('/system/user/list', { params });
 }
 
 /**
@@ -61,10 +65,4 @@ async function resetUserPassword(id: string, password: string) {
   return requestClient.put(`/system/user/${id}/password`, { password });
 }
 
-export {
-  createUser,
-  deleteUser,
-  getUserList,
-  resetUserPassword,
-  updateUser,
-};
+export { createUser, deleteUser, getUserList, resetUserPassword, updateUser };

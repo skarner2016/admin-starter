@@ -11,12 +11,26 @@
     "newPassword": "新密码",
     "id": "用户ID",
     "roles": "角色",
+    "dept": "部门",
     "status": "状态",
     "remark": "备注",
     "createTime": "创建时间",
     "operation": "操作",
     "detail": "详情",
     "resetPassword": "重置密码"
+  },
+  "dept": {
+    "title": "部门管理",
+    "list": "部门列表",
+    "name": "部门",
+    "deptName": "部门名称",
+    "parentDept": "上级部门",
+    "sort": "排序",
+    "status": "状态",
+    "remark": "备注",
+    "createTime": "创建时间",
+    "operation": "操作",
+    "appendChild": "新增下级"
   },
   "menu": {
     "list": "菜单列表",

@@ -151,17 +151,19 @@ src/
 
 ### 4.1 需实现的接口契约
 
-前端的接口定义已固定（见 `apps/web-ele/src/api/core/*.ts`），后端**必须按此契约实现**，返回体遵循 §3.4 的统一响应包：
+前端的接口定义已固定（鉴权与用户见 `apps/web-ele/src/api/core/*.ts`，系统管理见 `apps/web-ele/src/api/system/*.ts`），后端**必须按此契约实现**，返回体遵循 §3.4 的统一响应包：
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | POST | `/auth/login` | 登录，返回 `{ accessToken }`；refresh token 写入 HttpOnly Cookie |
-| POST | `/auth/refresh` | 用 Cookie 中的 refresh token 换新 accessToken（`withCredentials`） |
+| POST | `/auth/refresh` | 用 Cookie 中的 refresh token 换新 accessToken（`withCredentials`）；**返回裸字符串，不套响应包** |
 | POST | `/auth/logout` | 登出并清除 refresh cookie |
 | GET | `/auth/codes` | 返回当前用户权限码 `string[]` |
 | GET | `/user/info` | 返回当前用户信息（`UserInfo`） |
 | GET | `/menu/all` | 返回当前用户的菜单/路由树（`RouteRecordStringComponent[]`，字段与 vben 路由 `meta` 对齐） |
-| GET | `/system/user/list`、`/system/role/list`、`/system/menu/list`、`/system/dept/list` | 系统管理列表（分页，`{ items, total }`） |
+| GET | `/system/user/list`、`/system/role/list` | 分页列表（`{ items, total }`） |
+| GET | `/system/menu/list`、`/system/dept/list` | **树数组，不分页**（`children` 嵌套，`id` 一律字符串） |
+| POST/PUT/DELETE | `/system/{user,role,menu,dept}`（+ `/system/user/{id}/password`） | 系统管理增删改；写操作按按钮权限码校验，见 §3.6 |
 
 > 上述路径与响应结构参考自上游被移除的 `apps/backend-mock`。该目录已不在 `HEAD`（"project init" 提交中裁剪掉），需从裁剪前的提交取回，例如：`git show 151d80f9e:apps/backend-mock/api/auth/login.post.ts`。**这些 mock 已删除，前端开发环境需改为代理到 `apps/api`（见 §5）。**
 
@@ -293,7 +295,8 @@ php artisan test
 
 ## 9. 已知待办 / 陷阱
 
-1. **后端接口尚未实现**：`apps/api` 只有骨架，§4.1 的契约全部待实现，前端目前无可用后端。
-2. **前端代理仍指向已删除的 mock**：`apps/web-ele/vite.config.ts` 与 `.env.development` 需按 §5 调整。
-3. **工作区有大量未提交的删除**：仓库处于裁剪后的过渡状态，`apps/api` 尚未纳入 git 跟踪，提交前请确认范围。
+1. **加系统菜单不要重跑 `MenuSeeder`**：它开头会 `delete` 掉全部 `admin_menus` 与 `admin_role_menu`，等于回滚管理员在后台维护的菜单与角色授权。新增模块请照 `database/seeders/DeptMenuSeeder.php` 写幂等 seeder（按 `name` 定位 + 只追加授权）。
+2. **数据范围（按部门限制可见数据）未实现**：部门目前只是组织树与用户筛选维度，角色权限完全由菜单树决定。若要做数据权限，见 `docs/dept-module.md` §4.1 方案 B。
+3. **backend 模式下静态路由是死代码**：`accessMode=backend`（`src/preferences.ts`）时 `src/router/routes/modules/*.ts` 会被 `/menu/all` 的结果整体替换。加页面只需插 `admin_menus` 行 + 建 `views/**` 文件，**不要**改路由模块文件。
 4. **`web-ele` 是唯一前端应用**：所有前端需求都在 `apps/web-ele` 落地，不要新建 app，除非明确要求。
+5. **本地 `.env` 与 `.env.example` 不一致**：本地默认 sqlite + array 缓存，`.env.example` 是 mysql + redis，切环境时注意。

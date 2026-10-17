@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Laravel\Sanctum\HasApiTokens;
 use Spatie\Permission\Traits\HasRoles;
@@ -19,6 +20,7 @@ class AdminUserModel extends Authenticatable
         'avatar',
         'password',
         'description',
+        'dept_id',
         'status',
     ];
 
@@ -30,7 +32,13 @@ class AdminUserModel extends Authenticatable
     {
         return [
             'password' => 'hashed',
+            'dept_id' => 'integer',
             'status' => 'integer',
         ];
+    }
+
+    public function dept(): BelongsTo
+    {
+        return $this->belongsTo(DeptModel::class, 'dept_id');
     }
 }

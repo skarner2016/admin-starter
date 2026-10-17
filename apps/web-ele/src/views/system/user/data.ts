@@ -2,7 +2,20 @@ import type { VbenFormSchema } from '#/adapter/form';
 import type { OnActionClickFn, VxeTableGridColumns } from '#/adapter/vxe-table';
 import type { SystemUserApi } from '#/api/system/user';
 
+import { getDeptList } from '#/api/system/dept';
 import { $t } from '#/locales';
+
+/** 部门树选择器的公共配置：部门字段是 name / id，需显式指定映射 */
+function deptSelectProps() {
+  return {
+    allowClear: true,
+    api: getDeptList,
+    childrenField: 'children',
+    class: 'w-full',
+    labelField: 'name',
+    valueField: 'id',
+  };
+}
 
 export function useFormSchema(): VbenFormSchema[] {
   return [
@@ -17,6 +30,13 @@ export function useFormSchema(): VbenFormSchema[] {
       fieldName: 'realName',
       label: $t('system.user.realName'),
       rules: 'required',
+    },
+    {
+      // 非必填：super / 系统账号可能不属于任何部门
+      component: 'ApiTreeSelect',
+      componentProps: deptSelectProps(),
+      fieldName: 'deptId',
+      label: $t('system.user.dept'),
     },
     {
       component: 'Input',
@@ -72,6 +92,13 @@ export function useGridFormSchema(): VbenFormSchema[] {
       label: $t('system.user.realName'),
     },
     {
+      // 传部门 id 时后端按「该部门及其所有子孙部门」过滤
+      component: 'ApiTreeSelect',
+      componentProps: deptSelectProps(),
+      fieldName: 'deptId',
+      label: $t('system.user.dept'),
+    },
+    {
       component: 'Select',
       componentProps: {
         allowClear: true,
@@ -99,6 +126,11 @@ export function useColumns<T = SystemUserApi.SystemUser>(
     {
       field: 'realName',
       title: $t('system.user.realName'),
+      width: 160,
+    },
+    {
+      field: 'deptName',
+      title: $t('system.user.dept'),
       width: 160,
     },
     {

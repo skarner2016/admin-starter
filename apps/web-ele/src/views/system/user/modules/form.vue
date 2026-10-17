@@ -55,9 +55,12 @@ const [Drawer, drawerApi] = useVbenDrawer<null | SystemUserApi.SystemUser>({
     drawerApi.lock();
 
     // 编辑时不提交 password，避免覆盖（后端 update 也不处理该字段）
-    const payload = id.value
-      ? { ...values, password: undefined }
-      : values;
+    // deptId 空值统一提交空串，后端按「未分配」处理
+    const payload = {
+      ...values,
+      deptId: values.deptId ?? '',
+      password: id.value ? undefined : values.password,
+    };
 
     (id.value ? updateUser(id.value, payload) : createUser(payload))
       .then(() => {

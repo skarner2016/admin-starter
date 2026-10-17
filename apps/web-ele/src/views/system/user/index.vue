@@ -60,7 +60,10 @@ const [Grid, gridApi] = useVbenVxeGrid({
   } as VxeTableGridOptions<SystemUserApi.SystemUser>,
 });
 
-function onActionClick({ code, row }: OnActionClickParams<SystemUserApi.SystemUser>) {
+function onActionClick({
+  code,
+  row,
+}: OnActionClickParams<SystemUserApi.SystemUser>) {
   switch (code) {
     case 'delete': {
       onDelete(row);
@@ -93,6 +96,8 @@ async function onStatusChange(
       { type: 'warning' },
     );
     await updateUser(row.id, {
+      // 后端 update 是全量覆盖，漏传 deptId 会把用户部门清空
+      deptId: row.deptId ?? '',
       description: row.description,
       realName: row.realName,
       roles: row.roles ?? [],

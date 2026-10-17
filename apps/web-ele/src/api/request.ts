@@ -95,9 +95,13 @@ function createRequestClient(baseURL: string, options?: RequestClientOptions) {
   client.addResponseInterceptor(
     errorMessageResponseInterceptor((msg: string, error) => {
       // 这里可以根据业务进行定制,你可以拿到 error 内的信息进行定制化处理，根据不同的 code 做不同的提示，而不是直接使用 message.error 提示 msg
-      // 当前mock接口返回的错误字段是 error 或者 message
       const responseData = error?.response?.data ?? {};
-      const errorMessage = responseData?.error ?? responseData?.message ?? '';
+      // 业务错误的 error 是字符串；422 校验错误的 error 是 { 字段: [消息] } 对象，
+      // 交给 ElMessage 会渲染成空提示，此时退回 message（Laravel 会把首条校验消息放进去）
+      const errorMessage =
+        typeof responseData?.error === 'string'
+          ? responseData.error
+          : (responseData?.message ?? '');
       // 如果没有错误信息，则会根据状态码进行提示
       ElMessage.error(errorMessage || msg);
     }),

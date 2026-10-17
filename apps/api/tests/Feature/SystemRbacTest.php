@@ -294,7 +294,8 @@ class SystemRbacTest extends TestCase
         $created = $this->postJson('/api/system/user', [
             'username' => 'newbie',
             'realName' => 'Newbie',
-            'password' => 'secret123',
+            // UserRequest 要求密码含大小写与数字
+            'password' => 'Secret123',
             'status' => 1,
             'roles' => ['admin'],
         ])->assertOk()->assertJsonPath('code', 0)->json('data');

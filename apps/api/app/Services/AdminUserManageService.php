@@ -9,12 +9,15 @@ use Illuminate\Support\Facades\DB;
 
 class AdminUserManageService
 {
-    public function __construct(private readonly AdminUserService $auth) {}
+    public function __construct(
+        private readonly AdminUserService $auth,
+        private readonly DeptService $depts,
+    ) {}
 
     public function paginate(array $filters, int $page, int $pageSize): LengthAwarePaginator
     {
         return AdminUserModel::query()
-            ->with('roles')
+            ->with(['dept', 'roles'])
             ->when(
                 $filters['username'] ?? null,
                 fn ($query, $username) => $query->where('username', 'like', "%{$username}%"),
@@ -27,6 +30,11 @@ class AdminUserManageService
                 isset($filters['status']) && $filters['status'] !== '',
                 fn ($query) => $query->where('status', (int) $filters['status']),
             )
+            // 按部门筛选时含其所有子孙部门，先取子树 id 集合再 whereIn
+            ->when(
+                $this->deptId($filters['deptId'] ?? null),
+                fn ($query, $deptId) => $query->whereIn('dept_id', $this->depts->descendantIds($deptId)),
+            )
             ->orderByDesc('id')
             ->paginate($pageSize, ['*'], 'page', $page);
     }
@@ -34,7 +42,7 @@ class AdminUserManageService
     public function create(array $data): AdminUserModel
     {
         return DB::transaction(function () use ($data) {
-            if (in_array(self::SUPER_ROLE, $data['roles'] ?? [], true)
+            if (in_array(AdminUserService::SUPER_ROLE, $data['roles'] ?? [], true)
                 && ! $this->auth->isSuper(auth()->user())
             ) {
                 throw new AuthorizationException('只有 super 才能分配 super 角色。');
@@ -46,6 +54,7 @@ class AdminUserManageService
                 'avatar' => $data['avatar'] ?? null,
                 'password' => $data['password'],
                 'description' => $data['description'] ?? null,
+                'dept_id' => $this->deptId($data['deptId'] ?? null),
                 'status' => (int) ($data['status'] ?? 1),
             ]);
 
@@ -79,6 +88,7 @@ class AdminUserManageService
                 'real_name' => $data['realName'],
                 'avatar' => $data['avatar'] ?? null,
                 'description' => $data['description'] ?? null,
+                'dept_id' => $this->deptId($data['deptId'] ?? null),
                 'status' => (int) ($data['status'] ?? 1),
             ]);
 
@@ -127,5 +137,17 @@ class AdminUserManageService
     public function countUsersWithRole(string $roleName): int
     {
         return AdminUserModel::query()->role($roleName)->count();
+    }
+
+    /**
+     * 空值 / 0 一律视为「未分配部门」，统一落 null。
+     */
+    private function deptId(mixed $value): ?int
+    {
+        if ($value === null || $value === '' || (int) $value === 0) {
+            return null;
+        }
+
+        return (int) $value;
     }
 }

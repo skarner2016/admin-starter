@@ -11,12 +11,26 @@
     "newPassword": "New Password",
     "id": "User ID",
     "roles": "Roles",
+    "dept": "Department",
     "status": "Status",
     "remark": "Remark",
     "createTime": "Creation Time",
     "operation": "Operation",
     "detail": "Detail",
     "resetPassword": "Reset Password"
+  },
+  "dept": {
+    "title": "Department Management",
+    "list": "Department List",
+    "name": "Department",
+    "deptName": "Department Name",
+    "parentDept": "Parent Department",
+    "sort": "Sort",
+    "status": "Status",
+    "remark": "Remark",
+    "createTime": "Creation Time",
+    "operation": "Operation",
+    "appendChild": "Add Child"
   },
   "menu": {
     "list": "Menu List",

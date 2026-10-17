@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\AdminUserController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\MenuController;
+use App\Http\Controllers\Api\System\DeptController as SystemDeptController;
 use App\Http\Controllers\Api\System\MenuController as SystemMenuController;
 use App\Http\Controllers\Api\System\RoleController as SystemRoleController;
 use App\Http\Controllers\Api\System\UserController as SystemUserController;
@@ -30,6 +31,15 @@ Route::middleware('auth:sanctum')->group(function () {
             ->middleware('permission:System:Menu:Edit');
         Route::delete('menu/{menu}', [SystemMenuController::class, 'destroy'])
             ->middleware('permission:System:Menu:Delete');
+
+        Route::get('dept/list', [SystemDeptController::class, 'index']);
+        Route::get('dept/name-exists', [SystemDeptController::class, 'nameExists']);
+        Route::post('dept', [SystemDeptController::class, 'store'])
+            ->middleware('permission:System:Dept:Create');
+        Route::put('dept/{dept}', [SystemDeptController::class, 'update'])
+            ->middleware('permission:System:Dept:Edit');
+        Route::delete('dept/{dept}', [SystemDeptController::class, 'destroy'])
+            ->middleware('permission:System:Dept:Delete');
 
         Route::get('role/list', [SystemRoleController::class, 'index']);
         Route::post('role', [SystemRoleController::class, 'store'])

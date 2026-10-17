@@ -18,6 +18,7 @@ class AdminUserService
     }
 
     public const SUPER_ROLE = 'super';
+
     public const ACCESS_TTL_MINUTES = 60;
 
     public const REFRESH_TTL_DAYS = 7;

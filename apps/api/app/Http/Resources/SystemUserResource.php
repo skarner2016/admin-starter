@@ -15,6 +15,10 @@ class SystemUserResource extends JsonResource
             'realName' => $this->real_name,
             'avatar' => $this->avatar ?? '',
             'description' => $this->description,
+            // id 一律字符串：前端部门树选择器按字符串 id 绑定
+            'deptId' => $this->dept_id === null ? '' : (string) $this->dept_id,
+            // 不用 whenLoaded：关系已加载但值为 null（未分配部门）时它返回 null，而非默认值
+            'deptName' => $this->dept?->name ?? '',
             'status' => (int) $this->status,
             'roles' => $this->whenLoaded(
                 'roles',

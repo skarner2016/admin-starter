@@ -74,7 +74,7 @@ class UserController extends Controller
 
     private function resource(AdminUserModel $user, Request $request): array
     {
-        return (new SystemUserResource($user->loadMissing('roles')))->toArray($request);
+        return (new SystemUserResource($user->loadMissing(['dept', 'roles'])))->toArray($request);
     }
 
     private function page(Request $request): int
