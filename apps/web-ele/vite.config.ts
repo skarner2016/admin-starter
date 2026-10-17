@@ -13,11 +13,10 @@ export default defineConfig(async () => {
       ],
       server: {
         proxy: {
+          // 后端为 apps/api（Laravel），其 routes/api.php 自带 /api 前缀，故不做 rewrite
           '/api': {
             changeOrigin: true,
-            rewrite: (path) => path.replace(/^\/api/, ''),
-            // mock代理目标地址
-            target: 'http://localhost:5320/api',
+            target: 'http://127.0.0.1:8000',
             ws: true,
           },
         },

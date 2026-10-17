@@ -1,0 +1,132 @@
+<script lang="ts" setup>
+import type {
+  OnActionClickParams,
+  VxeTableGridOptions,
+} from '#/adapter/vxe-table';
+import type { SystemMenuApi } from '#/api/system/menu';
+
+import { Page, useVbenDrawer } from '@vben/common-ui';
+import { IconifyIcon, Plus } from '@vben/icons';
+import { $t } from '@vben/locales';
+
+import { ElButton, ElMessage, ElMessageBox } from 'element-plus';
+
+import { useVbenVxeGrid } from '#/adapter/vxe-table';
+import { deleteMenu, getMenuList } from '#/api/system/menu';
+
+import { useColumns } from './data';
+import Form from './modules/form.vue';
+
+const [FormDrawer, formDrawerApi] = useVbenDrawer<
+  Partial<SystemMenuApi.SystemMenu>
+>({
+  connectedComponent: Form,
+  destroyOnClose: true,
+});
+
+const [Grid, gridApi] = useVbenVxeGrid({
+  gridOptions: {
+    columns: useColumns(onActionClick),
+    height: 'auto',
+    keepSource: true,
+    pagerConfig: { enabled: false },
+    proxyConfig: {
+      ajax: {
+        query: async () => {
+          return await getMenuList();
+        },
+      },
+    },
+    rowConfig: { keyField: 'id' },
+    toolbarConfig: {
+      custom: true,
+      export: false,
+      refresh: true,
+      zoom: true,
+    },
+    treeConfig: {
+      parentField: 'pid',
+      rowField: 'id',
+      transform: false,
+    },
+  } as VxeTableGridOptions<SystemMenuApi.SystemMenu>,
+});
+
+function onActionClick({
+  code,
+  row,
+}: OnActionClickParams<SystemMenuApi.SystemMenu>) {
+  switch (code) {
+    case 'append': {
+      formDrawerApi.setData({ pid: row.id }).open();
+      break;
+    }
+    case 'delete': {
+      onDelete(row);
+      break;
+    }
+    case 'edit': {
+      formDrawerApi.setData(row).open();
+      break;
+    }
+    default: {
+      break;
+    }
+  }
+}
+
+function onDelete(row: SystemMenuApi.SystemMenu) {
+  ElMessageBox.confirm(
+    $t('ui.actionMessage.deleteConfirm', [row.name]),
+    $t('ui.actionTitle.delete', [$t('system.menu.name')]),
+    { type: 'warning' },
+  )
+    .then(async () => {
+      await deleteMenu(row.id);
+      ElMessage.success($t('ui.actionMessage.deleteSuccess', [row.name]));
+      onRefresh();
+    })
+    .catch(() => {});
+}
+
+function onRefresh() {
+  gridApi.query();
+}
+
+function onCreate() {
+  formDrawerApi.setData({}).open();
+}
+</script>
+
+<template>
+  <Page auto-content-height>
+    <FormDrawer @success="onRefresh" />
+    <Grid :table-title="$t('system.menu.list')">
+      <template #toolbar-tools>
+        <ElButton type="primary" @click="onCreate">
+          <Plus class="size-5" />
+          {{ $t('ui.actionTitle.create', [$t('system.menu.name')]) }}
+        </ElButton>
+      </template>
+      <template #title="{ row }">
+        <div class="flex w-full items-center gap-1">
+          <div class="size-5 shrink-0">
+            <IconifyIcon
+              v-if="row.type === 'button'"
+              class="size-full"
+              icon="carbon:security"
+            />
+            <IconifyIcon
+              v-else-if="row.meta?.icon"
+              class="size-full"
+              :icon="row.meta?.icon"
+            />
+          </div>
+          <span class="flex-auto">
+            {{ row.meta?.title ? $t(row.meta.title) : row.name }}
+          </span>
+        </div>
+      </template>
+    </Grid>
+  </Page>
+</template>

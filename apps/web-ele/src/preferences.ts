@@ -11,6 +11,8 @@ import {
 export const overridesPreferences = defineOverridesPreferences({
   // overrides
   app: {
+    // 菜单/路由改由后端 /menu/all 动态下发
+    accessMode: 'backend',
     name: import.meta.env.VITE_APP_TITLE,
   },
   copyright: appCopyrightPreferences,
