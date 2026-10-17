@@ -41,7 +41,9 @@ return [
         'public' => [
             'driver' => 'local',
             'root' => storage_path('app/public'),
-            'url' => rtrim(env('APP_URL', 'http://localhost'), '/').'/storage',
+            // 默认返回站内相对地址，前端开发环境由 Vite 代理 /storage 到本服务；
+            // API 与前端不同域时用 FILESYSTEM_PUBLIC_URL 覆盖为绝对地址。
+            'url' => env('FILESYSTEM_PUBLIC_URL', '/storage'),
             'visibility' => 'public',
             'throw' => false,
             'report' => false,

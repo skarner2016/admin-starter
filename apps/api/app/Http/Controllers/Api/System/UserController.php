@@ -4,12 +4,12 @@ namespace App\Http\Controllers\Api\System;
 
 use App\Helpers\Traits\ApiResponseTrait;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\BatchIdsRequest;
 use App\Http\Requests\System\ResetPasswordRequest;
 use App\Http\Requests\System\UserRequest;
 use App\Http\Resources\SystemUserResource;
 use App\Models\AdminUserModel;
 use App\Services\AdminUserManageService;
-use App\Services\AdminUserService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -50,19 +50,22 @@ class UserController extends Controller
 
     public function destroy(Request $request, AdminUserModel $user): JsonResponse
     {
-        if ($request->user()->id === $user->id) {
-            return $this->errorResponse('不能删除当前登录账号。');
-        }
+        $reason = $this->users->deleteFailureReason($user, $request->user());
 
-        if ($user->hasRole(AdminUserService::SUPER_ROLE)
-            && $this->users->countUsersWithRole(AdminUserService::SUPER_ROLE) <= 1
-        ) {
-            return $this->errorResponse('不能删除最后一个 super 账号。');
+        if ($reason !== null) {
+            return $this->errorResponse($reason);
         }
 
         $this->users->delete($user);
 
         return $this->successResponse('');
+    }
+
+    public function batchDestroy(BatchIdsRequest $request): JsonResponse
+    {
+        return $this->successResponse(
+            $this->users->batchDelete($request->validated()['ids'], $request->user()),
+        );
     }
 
     public function resetPassword(ResetPasswordRequest $request, AdminUserModel $user): JsonResponse

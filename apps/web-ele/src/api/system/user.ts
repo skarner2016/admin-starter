@@ -59,10 +59,27 @@ async function deleteUser(id: string) {
 }
 
 /**
+ * 批量删除用户（后端逐条应用删除护栏，返回每条结果）
+ */
+async function batchDeleteUsers(ids: string[]) {
+  return requestClient.post<{
+    deleted: string[];
+    failed: Array<{ id: string; message: string }>;
+  }>('/system/user/batch-delete', { ids });
+}
+
+/**
  * 重置密码
  */
 async function resetUserPassword(id: string, password: string) {
   return requestClient.put(`/system/user/${id}/password`, { password });
 }
 
-export { createUser, deleteUser, getUserList, resetUserPassword, updateUser };
+export {
+  batchDeleteUsers,
+  createUser,
+  deleteUser,
+  getUserList,
+  resetUserPassword,
+  updateUser,
+};

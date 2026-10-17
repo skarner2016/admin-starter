@@ -55,6 +55,11 @@ class RoleService
             throw new AuthorizationException('只有 super 才能修改 super 角色。');
         }
 
+        // super 角色停用会让唯一拥有全量权限的角色失效，等价于自锁，直接禁止
+        if ($role->name === AdminUserService::SUPER_ROLE && (int) ($data['status'] ?? 1) !== 1) {
+            throw new AuthorizationException('super 角色不允许停用。');
+        }
+
         return DB::transaction(function () use ($role, $data) {
             $role->update([
                 'name' => $data['name'],
@@ -79,6 +84,60 @@ class RoleService
             $role->syncPermissions([]);
             $role->delete();
         });
+    }
+
+    /**
+     * 删除前的业务护栏。单条与批量共用，保证两条路径规则一致。
+     */
+    public function deleteFailureReason(RoleModel $role): ?string
+    {
+        if ($role->name === AdminUserService::SUPER_ROLE) {
+            return 'super 角色不允许删除。';
+        }
+
+        if ($this->userCount($role) > 0) {
+            return '该角色下仍有用户，无法删除。';
+        }
+
+        return null;
+    }
+
+    /**
+     * 批量删除：逐条应用与单条相同的护栏，返回每条的结果。
+     *
+     * @param  array<int, int|string>  $ids
+     * @return array{deleted: array<int, string>, failed: array<int, array{id: string, message: string}>}
+     */
+    public function batchDelete(array $ids): array
+    {
+        $ids = array_values(array_unique(array_map('intval', $ids)));
+        $roles = RoleModel::query()->whereIn('id', $ids)->get()->keyBy('id');
+
+        $deleted = [];
+        $failed = [];
+
+        foreach ($ids as $id) {
+            $role = $roles->get($id);
+
+            if (! $role) {
+                $failed[] = ['id' => (string) $id, 'message' => '角色不存在。'];
+
+                continue;
+            }
+
+            $reason = $this->deleteFailureReason($role);
+
+            if ($reason !== null) {
+                $failed[] = ['id' => (string) $id, 'message' => $reason];
+
+                continue;
+            }
+
+            $this->delete($role);
+            $deleted[] = (string) $id;
+        }
+
+        return ['deleted' => $deleted, 'failed' => $failed];
     }
 
     public function userCount(RoleModel $role): int

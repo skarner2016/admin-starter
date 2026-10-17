@@ -64,10 +64,13 @@ class AuthLoginTest extends TestCase
 
     public function test_login_without_required_fields_returns_422(): void
     {
-        $this->postJson('/api/auth/login', [])
+        $response = $this->postJson('/api/auth/login', [])
             ->assertStatus(422)
             ->assertJsonPath('code', 422)
             ->assertJsonStructure(['error' => ['username', 'password']]);
+
+        // 校验消息来自 lang/zh_CN/validation.php，字段名来自 FormRequest::attributes()
+        $this->assertStringContainsString('用户名 不能为空', $response->json('message'));
     }
 
     public function test_disabled_account_returns_403(): void
@@ -165,8 +168,8 @@ class AuthLoginTest extends TestCase
             ->getJson('/api/auth/codes')
             ->assertOk()
             ->assertJsonPath('code', 0)
-            // 系统管理 3 个页面 + 部门页，各 3 个按钮权限码
-            ->assertJsonCount(12, 'data');
+            // 用户/角色/菜单/部门 4 页各 3 个按钮码 + 登录日志的查看码
+            ->assertJsonCount(13, 'data');
     }
 
     public function test_codes_returns_only_own_permissions_for_normal_role(): void
@@ -197,7 +200,7 @@ class AuthLoginTest extends TestCase
             ->assertOk()
             ->json('data');
 
-        $this->assertCount(12, $codes);
+        $this->assertCount(13, $codes);
         $this->assertContains('System:User:Create', $codes);
         $this->assertContains('System:Dept:Create', $codes);
     }

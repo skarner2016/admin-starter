@@ -13,8 +13,9 @@ class DatabaseSeeder extends Seeder
             DeptSeeder::class,
             AdminUserSeeder::class,
             MenuSeeder::class,
-            // 部门菜单独立成幂等 seeder：MenuSeeder 会清空菜单与授权，不能靠重跑它来加部门
+            // 各模块的菜单独立成幂等 seeder：MenuSeeder 会清空菜单与授权，不能靠重跑它来加模块
             DeptMenuSeeder::class,
+            LoginLogMenuSeeder::class,
         ]);
     }
 }

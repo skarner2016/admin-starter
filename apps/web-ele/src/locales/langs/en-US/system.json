@@ -32,6 +32,23 @@
     "operation": "Operation",
     "appendChild": "Add Child"
   },
+  "loginLog": {
+    "title": "Login Log",
+    "list": "Login Log",
+    "username": "Username",
+    "success": "Result",
+    "successYes": "Success",
+    "successNo": "Failed",
+    "reason": "Failure Reason",
+    "reasonDisabled": "Account Disabled",
+    "reasonInvalidCredentials": "Wrong Password",
+    "reasonLocked": "Account Locked",
+    "ip": "IP Address",
+    "userAgent": "Client",
+    "createTime": "Login Time",
+    "range": "Time Range",
+    "view": "View"
+  },
   "menu": {
     "list": "Menu List",
     "activeIcon": "Active Icon",

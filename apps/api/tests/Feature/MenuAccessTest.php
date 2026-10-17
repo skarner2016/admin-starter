@@ -114,6 +114,23 @@ class MenuAccessTest extends TestCase
         $this->assertSame('Workspace', $menus[0]['children'][0]['name']);
     }
 
+    public function test_disabled_role_contributes_no_menus(): void
+    {
+        $jack = AdminUserModel::query()->where('username', 'jack')->firstOrFail();
+        $role = $jack->roles->first();
+        $this->assertSame('user', $role->name);
+
+        $this->actingAsUser('jack');
+        $this->assertNotEmpty($this->getJson('/api/menu/all')->assertOk()->json('data'));
+
+        // 停用角色 = 该角色不再贡献任何菜单
+        $role->update(['status' => 0]);
+        $this->assertSame([], $this->getJson('/api/menu/all')->assertOk()->json('data'));
+
+        $role->update(['status' => 1]);
+        $this->assertNotEmpty($this->getJson('/api/menu/all')->assertOk()->json('data'));
+    }
+
     public function test_home_path_is_identical_for_every_user(): void
     {
         foreach (['vben', 'admin', 'jack'] as $username) {

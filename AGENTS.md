@@ -163,7 +163,11 @@ src/
 | GET | `/menu/all` | 返回当前用户的菜单/路由树（`RouteRecordStringComponent[]`，字段与 vben 路由 `meta` 对齐） |
 | GET | `/system/user/list`、`/system/role/list` | 分页列表（`{ items, total }`） |
 | GET | `/system/menu/list`、`/system/dept/list` | **树数组，不分页**（`children` 嵌套，`id` 一律字符串） |
+| GET | `/system/login-log/list` | 登录日志分页；**读也需要权限码** `System:LoginLog:View`（日志含 IP/UA） |
 | POST/PUT/DELETE | `/system/{user,role,menu,dept}`（+ `/system/user/{id}/password`） | 系统管理增删改；写操作按按钮权限码校验，见 §3.6 |
+| POST | `/system/{user,role}/batch-delete` | 批量删除，`{ ids: string[] }`；逐条应用单条删除的护栏，返回 `{ deleted, failed: [{id,message}] }` |
+| POST | `/upload` | 图片上传（登录即可），返回 `{ name, size, url }`，`url` 形如 `/storage/...` |
+| PUT | `/user/profile`、`/user/password` | 个人中心：改自己的资料 / 改密（当前会话保留，其它令牌失效） |
 
 > 上述路径与响应结构参考自上游被移除的 `apps/backend-mock`。该目录已不在 `HEAD`（"project init" 提交中裁剪掉），需从裁剪前的提交取回，例如：`git show 151d80f9e:apps/backend-mock/api/auth/login.post.ts`。**这些 mock 已删除，前端开发环境需改为代理到 `apps/api`（见 §5）。**
 
@@ -196,6 +200,7 @@ src/
 composer install
 cp .env.example .env && php artisan key:generate
 php artisan migrate --seed
+php artisan storage:link          # 头像等上传文件对外访问（/storage/...）
 php artisan serve                 # 默认 http://127.0.0.1:8000
 php artisan test
 ./vendor/bin/pint
@@ -207,20 +212,10 @@ php artisan test
 
 1. 后端启动：`cd apps/api && php artisan serve`（默认 `127.0.0.1:8000`）。
 2. 前端接口地址：`apps/web-ele/.env.development` 中 `VITE_GLOB_API_URL=/api`。
-3. 开发代理：`apps/web-ele/vite.config.ts` 的 `server.proxy['/api']`。
-   **当前 target 仍指向已删除的 mock 服务 `http://localhost:5320/api`，必须改为后端地址**，例如：
+3. 开发代理：`apps/web-ele/vite.config.ts` 的 `server.proxy`。当前已指向 `http://127.0.0.1:8000`，并**不做 rewrite**（Laravel 的 `routes/api.php` 自带 `/api` 前缀，前后端路径天然一致）。
+   另有一条 `/storage` 代理，用于上传文件（见 §4.4 的 `storage:link`）。
 
-   ```ts
-   '/api': {
-     changeOrigin: true,
-     rewrite: (path) => path.replace(/^\/api/, ''),
-     target: 'http://127.0.0.1:8000',
-     ws: true,
-   }
-   ```
-
-   注意 `rewrite` 会去掉 `/api` 前缀，因此后端路由应注册为 `/auth/login`、`/user/info` 等（即 Laravel 的 `routes/api.php` 若不额外加 `api` 前缀需相应调整，保持前后端路径一致）。
-4. `apps/web-ele/.env.development` 中 `VITE_NITRO_MOCK=true` 已失效（mock 应用已删除），联调后端时应设为 `false`。
+4. `apps/web-ele/.env.development` 中 `VITE_NITRO_MOCK=false`（mock 应用已删除），`VITE_GLOB_API_URL=/api`。
 5. 生产：`VITE_GLOB_API_URL` 会在打包时注入 `_app-config-{version}-{hash}.js`，可打包后动态改接口地址，无需按环境多次打包。
 
 ---
@@ -295,8 +290,12 @@ php artisan test
 
 ## 9. 已知待办 / 陷阱
 
-1. **加系统菜单不要重跑 `MenuSeeder`**：它开头会 `delete` 掉全部 `admin_menus` 与 `admin_role_menu`，等于回滚管理员在后台维护的菜单与角色授权。新增模块请照 `database/seeders/DeptMenuSeeder.php` 写幂等 seeder（按 `name` 定位 + 只追加授权）。
-2. **数据范围（按部门限制可见数据）未实现**：部门目前只是组织树与用户筛选维度，角色权限完全由菜单树决定。若要做数据权限，见 `docs/dept-module.md` §4.1 方案 B。
+1. **加系统菜单不要重跑 `MenuSeeder`**：它开头会 `delete` 掉全部 `admin_menus` 与 `admin_role_menu`，等于回滚管理员在后台维护的菜单与角色授权。新增模块请照 `database/seeders/DeptMenuSeeder.php` / `LoginLogMenuSeeder.php` 写幂等 seeder（按 `name` 定位 + 只追加授权）。
+2. **数据范围（按部门限制可见数据）未实现**：部门目前是组织树 + 用户筛选维度 + 停用语义，角色权限完全由菜单树决定。若要做数据权限，见 `docs/dept-module.md` §4.1 方案 B。
 3. **backend 模式下静态路由是死代码**：`accessMode=backend`（`src/preferences.ts`）时 `src/router/routes/modules/*.ts` 会被 `/menu/all` 的结果整体替换。加页面只需插 `admin_menus` 行 + 建 `views/**` 文件，**不要**改路由模块文件。
 4. **`web-ele` 是唯一前端应用**：所有前端需求都在 `apps/web-ele` 落地，不要新建 app，除非明确要求。
-5. **本地 `.env` 与 `.env.example` 不一致**：本地默认 sqlite + array 缓存，`.env.example` 是 mysql + redis，切环境时注意。
+5. **本地 `.env` 与 `.env.example` 不一致**：本地默认 sqlite + array 缓存，`.env.example` 是 mysql + redis，切环境时注意；上传文件需要 `php artisan storage:link`。
+6. **角色 `status`、部门 `status` 是有语义的**：停用角色不贡献菜单/权限码（且 super 角色不可停用）；停用部门不能被新分配、不能作新上级（仅在值变化时校验）。改这两块逻辑前先看 `docs/system-completion.md` §2。
+7. **登录日志的读接口要求权限码** `System:LoginLog:View`（全仓唯一的「读也要码」例子），不要顺手改成「登录即可」。
+8. **密码策略是共用的**：`AdminUserService::PASSWORD_MIN_LENGTH` / `PASSWORD_PATTERN`，创建、管理员重置、自助改密三条路径必须一致。
+9. **本机 pnpm 环境**（如遇 `ERR_PNPM_PM_ON_FAIL` / hooks 报 `Cannot find module @vben/oxlint-config/dist`）：项目 pin 的 `pnpm@11.16.0` 在 darwin-x64 没有原生二进制；可临时装到独立前缀后加入 `PATH`（`npm i -g --prefix /tmp/pnpm-11 pnpm@11.16.0`），并跑一次 `pnpm -r run --if-present stub` 补齐 lint 配置包的 `dist/`。不要用 `--no-verify` 绕过 hooks。

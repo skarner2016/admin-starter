@@ -6,6 +6,7 @@ use App\Models\AdminUserModel;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
+use Throwable;
 
 class AdminUserManageService
 {
@@ -68,6 +69,24 @@ class AdminUserManageService
     {
         return DB::transaction(function () use ($user, $data) {
             $wasEnabled = (int) $user->status === 1;
+            $current = auth()->user();
+
+            // 自锁保护：不允许停用自己（与「不能删除当前账号」对称）
+            if ($current instanceof AdminUserModel
+                && $current->id === $user->id
+                && (int) ($data['status'] ?? 1) !== 1
+            ) {
+                throw new AuthorizationException('不能停用当前登录账号。');
+            }
+
+            // 自锁保护：super 不允许摘掉自己的 super 角色
+            if ($current instanceof AdminUserModel
+                && $current->id === $user->id
+                && $this->auth->isSuper($user)
+                && ! in_array(AdminUserService::SUPER_ROLE, $data['roles'] ?? [], true)
+            ) {
+                throw new AuthorizationException('不能移除自己的 super 角色。');
+            }
 
             // super 保护：非 super 不可修改 super 用户（含停用、改角色）
             if ($user->hasRole(AdminUserService::SUPER_ROLE)
@@ -115,6 +134,68 @@ class AdminUserManageService
             $user->syncRoles([]);
             $user->delete();
         });
+    }
+
+    /**
+     * 删除前的业务护栏。单条与批量共用，保证两条路径规则一致。
+     * 返回 null 表示允许删除。
+     */
+    public function deleteFailureReason(AdminUserModel $user, AdminUserModel $operator): ?string
+    {
+        if ($operator->id === $user->id) {
+            return '不能删除当前登录账号。';
+        }
+
+        if ($user->hasRole(AdminUserService::SUPER_ROLE)
+            && $this->countUsersWithRole(AdminUserService::SUPER_ROLE) <= 1
+        ) {
+            return '不能删除最后一个 super 账号。';
+        }
+
+        return null;
+    }
+
+    /**
+     * 批量删除：逐条应用与单条相同的护栏，返回每条的结果，
+     * 避免「一条失败导致整批回滚」。
+     *
+     * @param  array<int, int|string>  $ids
+     * @return array{deleted: array<int, string>, failed: array<int, array{id: string, message: string}>}
+     */
+    public function batchDelete(array $ids, AdminUserModel $operator): array
+    {
+        $ids = array_values(array_unique(array_map('intval', $ids)));
+        $users = AdminUserModel::query()->whereIn('id', $ids)->get()->keyBy('id');
+
+        $deleted = [];
+        $failed = [];
+
+        foreach ($ids as $id) {
+            $user = $users->get($id);
+
+            if (! $user) {
+                $failed[] = ['id' => (string) $id, 'message' => '用户不存在。'];
+
+                continue;
+            }
+
+            $reason = $this->deleteFailureReason($user, $operator);
+
+            if ($reason !== null) {
+                $failed[] = ['id' => (string) $id, 'message' => $reason];
+
+                continue;
+            }
+
+            try {
+                $this->delete($user);
+                $deleted[] = (string) $id;
+            } catch (Throwable $e) {
+                $failed[] = ['id' => (string) $id, 'message' => $e->getMessage()];
+            }
+        }
+
+        return ['deleted' => $deleted, 'failed' => $failed];
     }
 
     public function resetPassword(AdminUserModel $user, string $password): void

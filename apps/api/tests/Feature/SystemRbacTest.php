@@ -268,6 +268,34 @@ class SystemRbacTest extends TestCase
         $this->assertDatabaseHas('admin_roles', ['id' => $role->id]);
     }
 
+    public function test_super_role_cannot_be_disabled(): void
+    {
+        $this->actingAsUser('vben');
+        $role = RoleModel::findByName('super', 'web');
+
+        $this->putJson("/api/system/role/{$role->id}", [
+            'name' => 'super',
+            'status' => 0,
+        ])->assertStatus(403);
+
+        $this->assertSame(1, (int) $role->fresh()->status);
+    }
+
+    public function test_disabled_role_grants_no_permission_codes(): void
+    {
+        $this->actingAsUser('admin');
+        $this->assertNotEmpty($this->getJson('/api/auth/codes')->assertOk()->json('data'));
+
+        $role = RoleModel::findByName('admin', 'web');
+        $role->update(['status' => 0]);
+
+        $this->assertSame([], $this->getJson('/api/auth/codes')->assertOk()->json('data'));
+
+        // 重新启用后权限码恢复
+        $role->update(['status' => 1]);
+        $this->assertNotEmpty($this->getJson('/api/auth/codes')->assertOk()->json('data'));
+    }
+
     // ===================== 用户 =====================
 
     public function test_user_list_returns_pagination_shape(): void
@@ -351,12 +379,124 @@ class SystemRbacTest extends TestCase
         app(AdminUserService::class)->issueTokens($jack);
         $this->assertSame(2, $jack->tokens()->count());
 
-        $this->putJson("/api/system/user/{$jack->id}/password", ['password' => 'brand-new-pass'])
+        $this->putJson("/api/system/user/{$jack->id}/password", ['password' => 'BrandNew-pass1'])
             ->assertOk()
             ->assertJsonPath('code', 0);
 
         $this->assertSame(0, $jack->tokens()->count());
-        $this->assertTrue(Hash::check('brand-new-pass', $jack->fresh()->password));
+        $this->assertTrue(Hash::check('BrandNew-pass1', $jack->fresh()->password));
+    }
+
+    public function test_batch_delete_users_skips_protected_ones(): void
+    {
+        $this->actingAsUser('vben');
+        $vben = AdminUserModel::query()->where('username', 'vben')->firstOrFail();
+
+        $temp = AdminUserModel::query()->create([
+            'username' => 'temp-del',
+            'real_name' => 'Temp',
+            'password' => 'Secret123',
+            'status' => 1,
+        ]);
+
+        $result = $this->postJson('/api/system/user/batch-delete', [
+            'ids' => [(string) $temp->id, (string) $vben->id, '99999'],
+        ])->assertOk()->assertJsonPath('code', 0)->json('data');
+
+        // 只有可删的那条被删除
+        $this->assertSame([(string) $temp->id], $result['deleted']);
+        $this->assertDatabaseMissing('admin_users', ['id' => $temp->id]);
+        $this->assertDatabaseHas('admin_users', ['id' => $vben->id]);
+
+        // 每条失败都带自己的原因
+        $messages = collect($result['failed'])->pluck('message', 'id')->all();
+        $this->assertSame('不能删除当前登录账号。', $messages[(string) $vben->id]);
+        $this->assertSame('用户不存在。', $messages['99999']);
+
+        // 换成 admin 删唯一的 super：命中「最后一个 super」护栏
+        $this->actingAsUser('admin');
+        $byAdmin = $this->postJson('/api/system/user/batch-delete', [
+            'ids' => [(string) $vben->id],
+        ])->assertOk()->json('data');
+
+        $this->assertSame([], $byAdmin['deleted']);
+        $this->assertSame('不能删除最后一个 super 账号。', $byAdmin['failed'][0]['message']);
+    }
+
+    public function test_batch_delete_roles_skips_super_and_bound_roles(): void
+    {
+        $this->actingAsUser('vben');
+
+        $super = RoleModel::findByName('super', 'web');
+        $admin = RoleModel::findByName('admin', 'web'); // 有用户绑定
+        $temp = RoleModel::query()->create([
+            'name' => 'temp-role-del',
+            'guard_name' => 'web',
+            'status' => 1,
+        ]);
+
+        $result = $this->postJson('/api/system/role/batch-delete', [
+            'ids' => [(string) $temp->id, (string) $super->id, (string) $admin->id],
+        ])->assertOk()->json('data');
+
+        $this->assertSame([(string) $temp->id], $result['deleted']);
+        $this->assertDatabaseMissing('admin_roles', ['id' => $temp->id]);
+
+        $messages = collect($result['failed'])->pluck('message', 'id')->all();
+        $this->assertSame('super 角色不允许删除。', $messages[(string) $super->id]);
+        $this->assertSame('该角色下仍有用户，无法删除。', $messages[(string) $admin->id]);
+    }
+
+    public function test_batch_delete_requires_ids(): void
+    {
+        $this->actingAsUser('vben');
+
+        $this->postJson('/api/system/user/batch-delete', [])->assertStatus(422);
+        $this->postJson('/api/system/role/batch-delete', ['ids' => []])->assertStatus(422);
+    }
+
+    public function test_cannot_disable_own_account(): void
+    {
+        $this->actingAsUser('vben');
+        $vben = AdminUserModel::query()->where('username', 'vben')->firstOrFail();
+
+        $this->putJson("/api/system/user/{$vben->id}", [
+            'username' => 'vben',
+            'realName' => 'Vben',
+            'status' => 0,
+            'roles' => ['super'],
+        ])->assertStatus(403);
+
+        $this->assertSame(1, (int) $vben->fresh()->status);
+    }
+
+    public function test_cannot_remove_own_super_role(): void
+    {
+        $this->actingAsUser('vben');
+        $vben = AdminUserModel::query()->where('username', 'vben')->firstOrFail();
+
+        $this->putJson("/api/system/user/{$vben->id}", [
+            'username' => 'vben',
+            'realName' => 'Vben',
+            'status' => 1,
+            'roles' => ['admin'],
+        ])->assertStatus(403);
+
+        $this->assertContains('super', $vben->fresh()->roles->pluck('name')->all());
+    }
+
+    public function test_reset_password_enforces_same_policy_as_create(): void
+    {
+        $this->actingAsUser('vben');
+        $jack = AdminUserModel::query()->where('username', 'jack')->firstOrFail();
+
+        // 旧策略只要 6 位，现在与创建用户共用同一套复杂度要求
+        $this->putJson("/api/system/user/{$jack->id}/password", ['password' => '123456'])
+            ->assertStatus(422);
+
+        $this->putJson("/api/system/user/{$jack->id}/password", ['password' => 'Strong-pass1'])
+            ->assertOk()
+            ->assertJsonPath('code', 0);
     }
 
     public function test_disabling_user_revokes_tokens(): void
@@ -390,7 +530,7 @@ class SystemRbacTest extends TestCase
             'realName' => 'Sneaky',
             'password' => 'secret123',
             'status' => 1,
-        ])->assertStatus(403);
+        ])->assertStatus(403)->assertJsonPath('message', '没有该操作权限。');
 
         $this->assertDatabaseMissing('admin_users', ['username' => 'sneaky']);
     }

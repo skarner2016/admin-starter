@@ -55,8 +55,19 @@ class DeptRequest extends FormRequest
                         return;
                     }
 
-                    if (! DeptModel::query()->whereKey($pid)->exists()) {
+                    $parent = DeptModel::query()->find($pid);
+
+                    if (! $parent) {
                         $fail('上级部门不存在。');
+
+                        return;
+                    }
+
+                    // 仅当上级发生变化时校验启用状态：否则原有的停用父级会卡住该部门的其它编辑
+                    $currentPid = $dept instanceof DeptModel ? (int) $dept->pid : 0;
+
+                    if ((int) $parent->status !== 1 && $pid !== $currentPid) {
+                        $fail('上级部门已停用，无法作为上级。');
                     }
                 },
             ],

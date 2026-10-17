@@ -22,4 +22,12 @@ class LoginRequest extends FormRequest
             'password' => ['required', 'string', 'max:128'],
         ];
     }
+
+    public function attributes(): array
+    {
+        return [
+            'username' => '用户名',
+            'password' => '密码',
+        ];
+    }
 }

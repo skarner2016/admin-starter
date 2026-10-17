@@ -1,30 +1,19 @@
 <script setup lang="ts">
-import type { BasicOption } from '@vben/types';
+import type { Recordable } from '@vben/types';
 
 import type { VbenFormSchema } from '#/adapter/form';
 
 import { computed, onMounted, ref } from 'vue';
 
 import { ProfileBaseSetting } from '@vben/common-ui';
+import { useUserStore } from '@vben/stores';
 
-import { getUserInfoApi } from '#/api';
+import { ElMessage } from 'element-plus';
+
+import { getUserInfoApi, updateProfileApi, uploadFile } from '#/api';
 
 const profileBaseSettingRef = ref();
-
-const MOCK_ROLES_OPTIONS: BasicOption[] = [
-  {
-    label: '管理员',
-    value: 'super',
-  },
-  {
-    label: '用户',
-    value: 'user',
-  },
-  {
-    label: '测试',
-    value: 'test',
-  },
-];
+const userStore = useUserStore();
 
 const formSchema = computed((): VbenFormSchema[] => {
   return [
@@ -32,34 +21,67 @@ const formSchema = computed((): VbenFormSchema[] => {
       fieldName: 'realName',
       component: 'Input',
       label: '姓名',
+      rules: 'required',
     },
     {
-      fieldName: 'username',
-      component: 'Input',
-      label: '用户名',
-    },
-    {
-      fieldName: 'roles',
-      component: 'Select',
+      fieldName: 'avatar',
+      component: 'Upload',
       componentProps: {
-        mode: 'tags',
-        options: MOCK_ROLES_OPTIONS,
+        accept: 'image/*',
+        httpRequest: uploadFile,
+        limit: 1,
+        listType: 'picture-card',
       },
-      label: '角色',
+      help: '支持 jpg / png / gif / webp，不超过 2MB',
+      label: '头像',
     },
     {
-      fieldName: 'introduction',
-      component: 'Textarea',
+      fieldName: 'description',
+      component: 'Input',
+      componentProps: {
+        rows: 3,
+        type: 'textarea',
+      },
       label: '个人简介',
     },
   ];
 });
 
+/** fileList → URL：优先取本次上传的响应，其次取已有头像的 url */
+function avatarUrl(fileList: any): string | undefined {
+  const file = Array.isArray(fileList) ? fileList[0] : undefined;
+
+  return file?.response?.url ?? file?.url ?? undefined;
+}
+
 onMounted(async () => {
-  const data = await getUserInfoApi();
-  profileBaseSettingRef.value.getFormApi().setValues(data);
+  // 后端返回的是 description（UserInfo 类型里叫 desc），这里按实际字段读取
+  const data = (await getUserInfoApi()) as Recordable<any>;
+
+  profileBaseSettingRef.value?.getFormApi().setValues({
+    realName: data.realName,
+    description: data.description ?? '',
+    avatar: data.avatar
+      ? [{ name: 'avatar', status: 'done', url: data.avatar }]
+      : [],
+  });
 });
+
+async function handleSubmit(values: Recordable<any>) {
+  const info = await updateProfileApi({
+    avatar: avatarUrl(values.avatar),
+    description: values.description ?? '',
+    realName: values.realName,
+  });
+
+  userStore.setUserInfo(info);
+  ElMessage.success('资料已更新');
+}
 </script>
 <template>
-  <ProfileBaseSetting ref="profileBaseSettingRef" :form-schema="formSchema" />
+  <ProfileBaseSetting
+    ref="profileBaseSettingRef"
+    :form-schema="formSchema"
+    @submit="handleSubmit"
+  />
 </template>

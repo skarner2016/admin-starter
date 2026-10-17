@@ -2,6 +2,9 @@ import type { VbenFormSchema } from '#/adapter/form';
 import type { OnActionClickFn, VxeTableGridColumns } from '#/adapter/vxe-table';
 import type { SystemUserApi } from '#/api/system/user';
 
+import { useAccess } from '@vben/access';
+
+import { uploadFile } from '#/api';
 import { getDeptList } from '#/api/system/dept';
 import { $t } from '#/locales';
 
@@ -32,6 +35,19 @@ export function useFormSchema(): VbenFormSchema[] {
       rules: 'required',
     },
     {
+      component: 'Upload',
+      componentProps: {
+        accept: 'image/*',
+        // 走 requestClient 上传，自动带认证头；返回值 { url } 由 form.vue 解出
+        httpRequest: uploadFile,
+        limit: 1,
+        listType: 'picture-card',
+      },
+      fieldName: 'avatar',
+      help: '支持 jpg / png / gif / webp，不超过 2MB',
+      label: $t('system.user.avatar'),
+    },
+    {
       // 非必填：super / 系统账号可能不属于任何部门
       component: 'ApiTreeSelect',
       componentProps: deptSelectProps(),
@@ -46,6 +62,7 @@ export function useFormSchema(): VbenFormSchema[] {
         type: 'password',
       },
       fieldName: 'password',
+      help: '至少 8 位，需包含大小写字母和数字',
       label: $t('system.user.password'),
     },
     {
@@ -117,6 +134,11 @@ export function useColumns<T = SystemUserApi.SystemUser>(
   onActionClick: OnActionClickFn<T>,
   onStatusChange?: (newStatus: any, row: T) => PromiseLike<boolean | undefined>,
 ): VxeTableGridColumns {
+  const { hasAccessByCodes } = useAccess();
+  // 无编辑权限时状态列降级为只读标签，避免「点了才 403」
+  const canEdit = hasAccessByCodes(['System:User:Edit']);
+  const canDelete = hasAccessByCodes(['System:User:Delete']);
+
   return [
     {
       field: 'username',
@@ -142,8 +164,8 @@ export function useColumns<T = SystemUserApi.SystemUser>(
     },
     {
       cellRender: {
-        attrs: { beforeChange: onStatusChange },
-        name: onStatusChange ? 'CellSwitch' : 'CellTag',
+        attrs: { beforeChange: canEdit ? onStatusChange : undefined },
+        name: canEdit && onStatusChange ? 'CellSwitch' : 'CellTag',
       },
       field: 'status',
       title: $t('system.user.status'),
@@ -169,9 +191,13 @@ export function useColumns<T = SystemUserApi.SystemUser>(
         },
         name: 'CellOperation',
         options: [
-          'edit',
-          { code: 'reset', text: $t('system.user.resetPassword') },
-          'delete',
+          { code: 'edit', show: canEdit },
+          {
+            code: 'reset',
+            show: canEdit,
+            text: $t('system.user.resetPassword'),
+          },
+          { code: 'delete', show: canDelete },
         ],
       },
       field: 'operation',

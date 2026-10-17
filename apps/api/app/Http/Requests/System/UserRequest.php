@@ -4,6 +4,7 @@ namespace App\Http\Requests\System;
 
 use App\Models\AdminUserModel;
 use App\Models\DeptModel;
+use App\Services\AdminUserService;
 use Closure;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -24,8 +25,8 @@ class UserRequest extends FormRequest
             'realName' => ['required', 'string', 'max:64'],
             'avatar' => ['nullable', 'string', 'max:255'],
             'password' => $isCreate
-                ? ['required', 'string', 'min:8', 'max:64', 'regex:/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/']
-                : ['nullable', 'string', 'min:8', 'max:64', 'regex:/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/'],
+                ? ['required', ...self::passwordRules()]
+                : ['nullable', ...self::passwordRules()],
             'description' => ['nullable', 'string', 'max:255'],
             // 部门可空：super / 系统账号可能不属于任何部门；0 或空表示清空
             'deptId' => [
@@ -33,8 +34,26 @@ class UserRequest extends FormRequest
                 'integer',
                 'min:0',
                 function (string $attribute, mixed $value, Closure $fail) {
-                    if ((int) $value > 0 && ! DeptModel::query()->whereKey($value)->exists()) {
+                    $deptId = (int) $value;
+
+                    if ($deptId <= 0) {
+                        return;
+                    }
+
+                    $dept = DeptModel::query()->find($deptId);
+
+                    if (! $dept) {
                         $fail('部门不存在。');
+
+                        return;
+                    }
+
+                    // 仅当部门发生变化时校验启用状态：否则挂在已停用部门下的存量用户连备注都改不了
+                    $user = $this->route('user');
+                    $current = $user instanceof AdminUserModel ? (int) $user->dept_id : 0;
+
+                    if ((int) $dept->status !== 1 && $deptId !== $current) {
+                        $fail('该部门已停用，无法分配。');
                     }
                 },
             ],
@@ -61,5 +80,18 @@ class UserRequest extends FormRequest
         $user = $this->route('user');
 
         return $user instanceof AdminUserModel ? $user->id : null;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private static function passwordRules(): array
+    {
+        return [
+            'string',
+            'min:'.AdminUserService::PASSWORD_MIN_LENGTH,
+            'max:64',
+            'regex:'.AdminUserService::PASSWORD_PATTERN,
+        ];
     }
 }

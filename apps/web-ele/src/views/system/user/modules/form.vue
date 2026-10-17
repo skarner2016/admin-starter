@@ -56,8 +56,10 @@ const [Drawer, drawerApi] = useVbenDrawer<null | SystemUserApi.SystemUser>({
 
     // 编辑时不提交 password，避免覆盖（后端 update 也不处理该字段）
     // deptId 空值统一提交空串，后端按「未分配」处理
+    // avatar 由 ElUpload 维护 fileList，这里取出上传结果里的 URL
     const payload = {
       ...values,
+      avatar: avatarUrl(values.avatar),
       deptId: values.deptId ?? '',
       password: id.value ? undefined : values.password,
     };
@@ -85,10 +87,23 @@ const [Drawer, drawerApi] = useVbenDrawer<null | SystemUserApi.SystemUser>({
     await nextTick();
 
     if (data) {
-      formApi.setValues({ ...data, password: '' });
+      formApi.setValues({
+        ...data,
+        avatar: data.avatar
+          ? [{ name: 'avatar', status: 'done', url: data.avatar }]
+          : [],
+        password: '',
+      });
     }
   },
 });
+
+/** fileList → URL：优先取本次上传的响应，其次取已有头像的 url */
+function avatarUrl(fileList: any): string | undefined {
+  const file = Array.isArray(fileList) ? fileList[0] : undefined;
+
+  return file?.response?.url ?? file?.url ?? undefined;
+}
 
 const drawerTitle = computed(() =>
   id.value

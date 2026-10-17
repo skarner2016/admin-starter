@@ -32,6 +32,23 @@
     "operation": "操作",
     "appendChild": "新增下级"
   },
+  "loginLog": {
+    "title": "登录日志",
+    "list": "登录日志",
+    "username": "登录账号",
+    "success": "结果",
+    "successYes": "成功",
+    "successNo": "失败",
+    "reason": "失败原因",
+    "reasonDisabled": "账号停用",
+    "reasonInvalidCredentials": "密码错误",
+    "reasonLocked": "账号锁定",
+    "ip": "IP 地址",
+    "userAgent": "客户端",
+    "createTime": "登录时间",
+    "range": "时间范围",
+    "view": "查看"
+  },
   "menu": {
     "list": "菜单列表",
     "activeIcon": "激活图标",

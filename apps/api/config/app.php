@@ -78,7 +78,8 @@ return [
     |
     */
 
-    'locale' => env('APP_LOCALE', 'en'),
+    // 面向中文后台：默认中文，未覆盖的键回退到 fallback_locale
+    'locale' => env('APP_LOCALE', 'zh_CN'),
 
     'fallback_locale' => env('APP_FALLBACK_LOCALE', 'en'),
 

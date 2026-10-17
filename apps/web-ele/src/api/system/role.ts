@@ -20,10 +20,10 @@ export namespace SystemRoleApi {
  * 获取角色列表数据（分页）
  */
 async function getRoleList(params: Recordable<any>) {
-  return requestClient.get<{ items: SystemRoleApi.SystemRole[]; total: number }>(
-    '/system/role/list',
-    { params },
-  );
+  return requestClient.get<{
+    items: SystemRoleApi.SystemRole[];
+    total: number;
+  }>('/system/role/list', { params });
 }
 
 /**
@@ -50,4 +50,14 @@ async function deleteRole(id: string) {
   return requestClient.delete(`/system/role/${id}`);
 }
 
-export { createRole, deleteRole, getRoleList, updateRole };
+/**
+ * 批量删除角色（后端逐条应用删除护栏，返回每条结果）
+ */
+async function batchDeleteRoles(ids: string[]) {
+  return requestClient.post<{
+    deleted: string[];
+    failed: Array<{ id: string; message: string }>;
+  }>('/system/role/batch-delete', { ids });
+}
+
+export { batchDeleteRoles, createRole, deleteRole, getRoleList, updateRole };

@@ -91,7 +91,8 @@ class MenuService
             ->orderBy('sort');
 
         if (! $user->hasRole(AdminUserService::SUPER_ROLE)) {
-            $roleIds = $user->roles()->pluck('id')->all();
+            // 停用的角色不参与菜单计算：角色停用即等同于未授权
+            $roleIds = $user->roles()->where('status', 1)->pluck('id')->all();
 
             $menuIds = DB::table('admin_role_menu')
                 ->whereIn('role_id', $roleIds)

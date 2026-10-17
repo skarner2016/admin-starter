@@ -4,10 +4,10 @@ namespace App\Http\Controllers\Api\System;
 
 use App\Helpers\Traits\ApiResponseTrait;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\BatchIdsRequest;
 use App\Http\Requests\System\RoleRequest;
 use App\Http\Resources\SystemRoleResource;
 use App\Models\RoleModel;
-use App\Services\AdminUserService;
 use App\Services\RoleService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -49,17 +49,22 @@ class RoleController extends Controller
 
     public function destroy(RoleModel $role): JsonResponse
     {
-        if ($role->name === AdminUserService::SUPER_ROLE) {
-            return $this->errorResponse('super 角色不允许删除。');
-        }
+        $reason = $this->roles->deleteFailureReason($role);
 
-        if ($this->roles->userCount($role) > 0) {
-            return $this->errorResponse('该角色下仍有用户，无法删除。');
+        if ($reason !== null) {
+            return $this->errorResponse($reason);
         }
 
         $this->roles->delete($role);
 
         return $this->successResponse('');
+    }
+
+    public function batchDestroy(BatchIdsRequest $request): JsonResponse
+    {
+        return $this->successResponse(
+            $this->roles->batchDelete($request->validated()['ids']),
+        );
     }
 
     private function resource(RoleModel $role, Request $request): array

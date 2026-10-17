@@ -10,6 +10,7 @@ use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
+use Spatie\Permission\Exceptions\UnauthorizedException;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Throwable;
@@ -32,38 +33,45 @@ class ApiExceptionHandler
                 422,
             ),
             $e instanceof AuthenticationException => $this->errorResponse(
-                $e->getMessage() ?: 'Unauthenticated.',
+                $e->getMessage() ?: '请先登录。',
                 401,
                 null,
                 401,
             ),
+            // spatie 的权限中间件抛的是英文默认文案，统一成中文再返回
+            $e instanceof UnauthorizedException => $this->errorResponse(
+                '没有该操作权限。',
+                403,
+                null,
+                403,
+            ),
             $e instanceof AuthorizationException => $this->errorResponse(
-                $e->getMessage() ?: 'Forbidden.',
+                $e->getMessage() ?: '没有该操作权限。',
                 403,
                 null,
                 403,
             ),
             $e instanceof ModelNotFoundException,
             $e instanceof NotFoundHttpException => $this->errorResponse(
-                'Resource not found.',
+                '请求的资源不存在。',
                 404,
                 null,
                 404,
             ),
             $e instanceof ThrottleRequestsException => $this->errorResponse(
-                'Too many requests.',
+                '请求过于频繁，请稍后再试。',
                 429,
                 null,
                 429,
             ),
             $e instanceof HttpExceptionInterface => $this->errorResponse(
-                $e->getMessage() ?: 'Http error.',
+                $e->getMessage() ?: '请求处理失败。',
                 $e->getStatusCode(),
                 null,
                 $e->getStatusCode(),
             ),
             default => $this->errorResponse(
-                config('app.debug') ? $e->getMessage() : 'Server error.',
+                config('app.debug') ? $e->getMessage() : '服务器内部错误。',
                 500,
                 null,
                 500,

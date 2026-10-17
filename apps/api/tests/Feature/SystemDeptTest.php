@@ -378,4 +378,59 @@ class SystemDeptTest extends TestCase
 
         $this->assertDatabaseMissing('admin_users', ['username' => 'ghost-dept']);
     }
+
+    // ===================== 部门停用语义 =====================
+
+    public function test_disabled_dept_cannot_be_assigned_to_user(): void
+    {
+        $this->actingAsUser('vben');
+        $market = $this->dept('市场部');
+        $market->update(['status' => 0]);
+
+        $this->postJson('/api/system/user', [
+            'username' => 'disabled-dept-user',
+            'realName' => 'Disabled Dept',
+            'password' => 'Secret123',
+            'status' => 1,
+            'deptId' => (string) $market->id,
+        ])->assertStatus(422);
+
+        $this->assertDatabaseMissing('admin_users', ['username' => 'disabled-dept-user']);
+    }
+
+    public function test_user_already_in_disabled_dept_can_still_be_edited(): void
+    {
+        $this->actingAsUser('vben');
+        // jack 挂在「前端组」
+        $frontend = $this->dept('前端组');
+        $frontend->update(['status' => 0]);
+
+        $jack = AdminUserModel::query()->where('username', 'jack')->firstOrFail();
+
+        // 部门值未变化时不校验启用状态，否则存量用户连备注都改不了
+        $this->putJson("/api/system/user/{$jack->id}", [
+            'username' => 'jack',
+            'realName' => 'Jack Renamed',
+            'status' => 1,
+            'roles' => ['user'],
+            'deptId' => (string) $frontend->id,
+        ])->assertOk()->assertJsonPath('code', 0);
+
+        $this->assertSame('Jack Renamed', $jack->fresh()->real_name);
+    }
+
+    public function test_disabled_dept_cannot_be_parent(): void
+    {
+        $this->actingAsUser('vben');
+        $market = $this->dept('市场部');
+        $market->update(['status' => 0]);
+
+        $this->postJson('/api/system/dept', [
+            'name' => '停用部门下的新节点',
+            'pid' => (string) $market->id,
+            'status' => 1,
+        ])->assertStatus(422);
+
+        $this->assertDatabaseMissing('admin_depts', ['name' => '停用部门下的新节点']);
+    }
 }

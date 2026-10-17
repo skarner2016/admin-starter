@@ -1,6 +1,8 @@
 import type { OnActionClickFn, VxeTableGridColumns } from '#/adapter/vxe-table';
 import type { SystemMenuApi } from '#/api/system/menu';
 
+import { useAccess } from '@vben/access';
+
 import { $t } from '#/locales';
 
 /** 菜单类型 → Element Plus 语义色 */
@@ -21,6 +23,12 @@ export function getMenuTypeOptions() {
 export function useColumns(
   onActionClick: OnActionClickFn<SystemMenuApi.SystemMenu>,
 ): VxeTableGridColumns {
+  const { hasAccessByCodes } = useAccess();
+  // 行内操作按权限码显隐，避免「看得见按钮、点了才 403」
+  const canCreate = hasAccessByCodes(['System:Menu:Create']);
+  const canEdit = hasAccessByCodes(['System:Menu:Edit']);
+  const canDelete = hasAccessByCodes(['System:Menu:Delete']);
+
   return [
     {
       align: 'left',
@@ -87,9 +95,13 @@ export function useColumns(
         },
         name: 'CellOperation',
         options: [
-          { code: 'append', text: $t('system.menu.appendChild') },
-          'edit',
-          'delete',
+          {
+            code: 'append',
+            show: canCreate,
+            text: $t('system.menu.appendChild'),
+          },
+          { code: 'edit', show: canEdit },
+          { code: 'delete', show: canDelete },
         ],
       },
       field: 'operation',

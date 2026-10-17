@@ -4,9 +4,11 @@ use App\Http\Controllers\Api\AdminUserController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\MenuController;
 use App\Http\Controllers\Api\System\DeptController as SystemDeptController;
+use App\Http\Controllers\Api\System\LoginLogController as SystemLoginLogController;
 use App\Http\Controllers\Api\System\MenuController as SystemMenuController;
 use App\Http\Controllers\Api\System\RoleController as SystemRoleController;
 use App\Http\Controllers\Api\System\UserController as SystemUserController;
+use App\Http\Controllers\Api\UploadController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('auth')->group(function () {
@@ -18,6 +20,10 @@ Route::prefix('auth')->group(function () {
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('user/info', [AdminUserController::class, 'info']);
+    // 个人中心：改自己的资料与密码，不需要系统管理权限
+    Route::put('user/profile', [AdminUserController::class, 'updateProfile']);
+    Route::put('user/password', [AdminUserController::class, 'updatePassword']);
+    Route::post('upload', [UploadController::class, 'store']);
     Route::get('menu/all', [MenuController::class, 'all']);
 
     // 读操作只要求登录；写操作按按钮权限码校验（与前端 v-access:code 同源）
@@ -48,6 +54,8 @@ Route::middleware('auth:sanctum')->group(function () {
             ->middleware('permission:System:Role:Edit');
         Route::delete('role/{role}', [SystemRoleController::class, 'destroy'])
             ->middleware('permission:System:Role:Delete');
+        Route::post('role/batch-delete', [SystemRoleController::class, 'batchDestroy'])
+            ->middleware('permission:System:Role:Delete');
 
         Route::get('user/list', [SystemUserController::class, 'index']);
         Route::post('user', [SystemUserController::class, 'store'])
@@ -56,7 +64,13 @@ Route::middleware('auth:sanctum')->group(function () {
             ->middleware('permission:System:User:Edit');
         Route::delete('user/{user}', [SystemUserController::class, 'destroy'])
             ->middleware('permission:System:User:Delete');
+        Route::post('user/batch-delete', [SystemUserController::class, 'batchDestroy'])
+            ->middleware('permission:System:User:Delete');
         Route::put('user/{user}/password', [SystemUserController::class, 'resetPassword'])
             ->middleware('permission:System:User:Edit');
+
+        // 登录日志含 IP / UA，属于敏感数据，读接口也要求权限码
+        Route::get('login-log/list', [SystemLoginLogController::class, 'index'])
+            ->middleware('permission:System:LoginLog:View');
     });
 });

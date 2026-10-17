@@ -129,7 +129,11 @@ function onCreate() {
     <FormDrawer @success="onRefresh" />
     <Grid :table-title="$t('system.dept.list')">
       <template #toolbar-tools>
-        <ElButton type="primary" @click="onCreate">
+        <ElButton
+          v-access:code="'System:Dept:Create'"
+          type="primary"
+          @click="onCreate"
+        >
           <Plus class="size-5" />
           {{ $t('ui.actionTitle.create', [$t('system.dept.name')]) }}
         </ElButton>

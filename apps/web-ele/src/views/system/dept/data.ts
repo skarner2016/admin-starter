@@ -2,6 +2,8 @@ import type { VbenFormSchema } from '#/adapter/form';
 import type { OnActionClickFn, VxeTableGridColumns } from '#/adapter/vxe-table';
 import type { SystemDeptApi } from '#/api/system/dept';
 
+import { useAccess } from '@vben/access';
+
 import { $t } from '#/locales';
 
 export function useFormSchema(): VbenFormSchema[] {
@@ -58,6 +60,12 @@ export function useColumns<T = SystemDeptApi.SystemDept>(
   onActionClick: OnActionClickFn<T>,
   onStatusChange?: (newStatus: any, row: T) => PromiseLike<boolean | undefined>,
 ): VxeTableGridColumns {
+  const { hasAccessByCodes } = useAccess();
+  // 无编辑权限时状态列降级为只读标签，避免「点了才 403」
+  const canCreate = hasAccessByCodes(['System:Dept:Create']);
+  const canEdit = hasAccessByCodes(['System:Dept:Edit']);
+  const canDelete = hasAccessByCodes(['System:Dept:Delete']);
+
   return [
     {
       field: 'name',
@@ -73,8 +81,8 @@ export function useColumns<T = SystemDeptApi.SystemDept>(
     },
     {
       cellRender: {
-        attrs: { beforeChange: onStatusChange },
-        name: onStatusChange ? 'CellSwitch' : 'CellTag',
+        attrs: { beforeChange: canEdit ? onStatusChange : undefined },
+        name: canEdit && onStatusChange ? 'CellSwitch' : 'CellTag',
       },
       field: 'status',
       title: $t('system.dept.status'),
@@ -100,9 +108,13 @@ export function useColumns<T = SystemDeptApi.SystemDept>(
         },
         name: 'CellOperation',
         options: [
-          { code: 'append', text: $t('system.dept.appendChild') },
-          'edit',
-          'delete',
+          {
+            code: 'append',
+            show: canCreate,
+            text: $t('system.dept.appendChild'),
+          },
+          { code: 'edit', show: canEdit },
+          { code: 'delete', show: canDelete },
         ],
       },
       field: 'operation',

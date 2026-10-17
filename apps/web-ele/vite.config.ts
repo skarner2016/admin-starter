@@ -19,6 +19,12 @@ export default defineConfig(async () => {
             target: 'http://127.0.0.1:8000',
             ws: true,
           },
+          // 上传文件由 public 磁盘提供（需先 php artisan storage:link）
+          '/storage': {
+            changeOrigin: true,
+            target: 'http://127.0.0.1:8000',
+            ws: true,
+          },
         },
       },
     },

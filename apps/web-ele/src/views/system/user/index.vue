@@ -15,6 +15,7 @@ import { ElButton, ElMessage, ElMessageBox } from 'element-plus';
 
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
 import {
+  batchDeleteUsers,
   deleteUser,
   getUserList,
   resetUserPassword,
@@ -35,7 +36,9 @@ const [Grid, gridApi] = useVbenVxeGrid({
     submitOnChange: true,
   },
   gridOptions: {
+    checkboxConfig: { highlight: true },
     columns: useColumns(onActionClick, onStatusChange),
+    exportConfig: {},
     height: 'auto',
     keepSource: true,
     proxyConfig: {
@@ -52,7 +55,7 @@ const [Grid, gridApi] = useVbenVxeGrid({
     rowConfig: { keyField: 'id' },
     toolbarConfig: {
       custom: true,
-      export: false,
+      export: true,
       refresh: true,
       search: true,
       zoom: true,
@@ -112,11 +115,20 @@ async function onStatusChange(
 
 function onResetPassword(row: SystemUserApi.SystemUser) {
   ElMessageBox.prompt(
-    `为「${row.username}」设置新密码`,
+    `为「${row.username}」设置新密码（至少 8 位，需含大小写字母和数字）`,
     $t('system.user.resetPassword'),
     {
       inputType: 'password',
-      inputValidator: (value) => (value && value.length >= 6) || '至少 6 位',
+      // 与后端 AdminUserService 的密码策略保持一致
+      inputValidator: (value) => {
+        if (!value || value.length < 8) {
+          return '至少 8 位';
+        }
+        return (
+          /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/.test(value) ||
+          '需包含大小写字母和数字'
+        );
+      },
     },
   )
     .then(async ({ value }) => {
@@ -148,6 +160,39 @@ function onRefresh() {
 function onCreate() {
   formDrawerApi.setData(null).open();
 }
+
+async function onBatchDelete() {
+  const rows = gridApi.grid.getCheckboxRecords() as SystemUserApi.SystemUser[];
+
+  if (rows.length === 0) {
+    ElMessage.warning('请先选择要删除的数据');
+    return;
+  }
+
+  try {
+    await ElMessageBox.confirm(
+      `确定删除选中的 ${rows.length} 个用户吗？`,
+      '批量删除',
+      { type: 'warning' },
+    );
+  } catch {
+    return;
+  }
+
+  // 后端逐条应用删除护栏，返回每条结果（部分成功不会整批失败）
+  const result = await batchDeleteUsers(rows.map((row) => row.id));
+  const failed = result.failed ?? [];
+
+  if (failed.length > 0) {
+    ElMessage.warning(
+      `已删除 ${result.deleted.length} 个，${failed.length} 个未删除：${failed[0]?.message ?? ''}`,
+    );
+  } else {
+    ElMessage.success(`已删除 ${result.deleted.length} 个用户`);
+  }
+
+  onRefresh();
+}
 </script>
 
 <template>
@@ -155,9 +200,21 @@ function onCreate() {
     <FormDrawer @success="onRefresh" />
     <Grid :table-title="$t('system.user.list')">
       <template #toolbar-tools>
-        <ElButton type="primary" @click="onCreate">
+        <ElButton
+          v-access:code="'System:User:Create'"
+          type="primary"
+          @click="onCreate"
+        >
           <Plus class="size-5" />
           {{ $t('ui.actionTitle.create', [$t('system.user.name')]) }}
+        </ElButton>
+        <ElButton
+          v-access:code="'System:User:Delete'"
+          plain
+          type="danger"
+          @click="onBatchDelete"
+        >
+          批量删除
         </ElButton>
       </template>
     </Grid>

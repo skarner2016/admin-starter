@@ -9,7 +9,6 @@ use App\Services\AdminUserService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
-use Spatie\Permission\Models\Permission;
 use Symfony\Component\HttpFoundation\Cookie;
 
 class AuthController extends Controller
@@ -40,7 +39,7 @@ class AuthController extends Controller
         $refreshToken = $request->cookie(AdminUserService::COOKIE_NAME);
 
         if (! $refreshToken) {
-            abort(401, 'Missing refresh token.');
+            abort(401, '缺少刷新令牌。');
         }
 
         $tokens = $this->users->refresh($refreshToken);
@@ -66,14 +65,9 @@ class AuthController extends Controller
 
     public function codes(Request $request): JsonResponse
     {
-        $user = $request->user();
-
-        // 前端无 super 豁免，super 必须显式拿到全量权限码
-        $codes = $user->hasRole(AdminUserService::SUPER_ROLE)
-            ? Permission::query()->pluck('name')->all()
-            : $user->getAllPermissions()->pluck('name')->all();
-
-        return $this->successResponse(array_values($codes));
+        // 前端无 super 豁免，super 必须显式拿到全量权限码；
+        // 普通用户只统计启用角色贡献的权限码（见 AdminUserService::permissionCodesFor）
+        return $this->successResponse($this->users->permissionCodesFor($request->user()));
     }
 
     private function refreshCookie(string $value): Cookie

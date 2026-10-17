@@ -2,6 +2,8 @@ import type { VbenFormSchema } from '#/adapter/form';
 import type { OnActionClickFn, VxeTableGridColumns } from '#/adapter/vxe-table';
 import type { SystemRoleApi } from '#/api/system/role';
 
+import { useAccess } from '@vben/access';
+
 import { $t } from '#/locales';
 
 export function useFormSchema(): VbenFormSchema[] {
@@ -68,6 +70,11 @@ export function useColumns<T = SystemRoleApi.SystemRole>(
   onActionClick: OnActionClickFn<T>,
   onStatusChange?: (newStatus: any, row: T) => PromiseLike<boolean | undefined>,
 ): VxeTableGridColumns {
+  const { hasAccessByCodes } = useAccess();
+  // 无编辑权限时状态列降级为只读标签，避免「点了才 403」
+  const canEdit = hasAccessByCodes(['System:Role:Edit']);
+  const canDelete = hasAccessByCodes(['System:Role:Delete']);
+
   return [
     {
       field: 'name',
@@ -76,8 +83,8 @@ export function useColumns<T = SystemRoleApi.SystemRole>(
     },
     {
       cellRender: {
-        attrs: { beforeChange: onStatusChange },
-        name: onStatusChange ? 'CellSwitch' : 'CellTag',
+        attrs: { beforeChange: canEdit ? onStatusChange : undefined },
+        name: canEdit && onStatusChange ? 'CellSwitch' : 'CellTag',
       },
       field: 'status',
       title: $t('system.role.status'),
@@ -102,6 +109,11 @@ export function useColumns<T = SystemRoleApi.SystemRole>(
           onClick: onActionClick,
         },
         name: 'CellOperation',
+        // 显式声明，避免默认渲染出无处理逻辑的「详情」按钮
+        options: [
+          { code: 'edit', show: canEdit },
+          { code: 'delete', show: canDelete },
+        ],
       },
       field: 'operation',
       fixed: 'right',
