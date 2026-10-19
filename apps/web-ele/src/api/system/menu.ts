@@ -35,6 +35,8 @@ export namespace SystemMenuApi {
     redirect?: null | string;
     /** 状态 */
     status: 0 | 1;
+    /** 同级排序（运行时映射为 meta.order） */
+    sort?: number;
     /** 菜单类型 */
     type: (typeof MenuTypes)[number];
   }
@@ -47,24 +49,6 @@ async function getMenuList() {
   return requestClient.get<Array<SystemMenuApi.SystemMenu>>(
     '/system/menu/list',
   );
-}
-
-async function isMenuNameExists(
-  name: string,
-  id?: SystemMenuApi.SystemMenu['id'],
-) {
-  return requestClient.get<boolean>('/system/menu/name-exists', {
-    params: { id, name },
-  });
-}
-
-async function isMenuPathExists(
-  path: string,
-  id?: SystemMenuApi.SystemMenu['id'],
-) {
-  return requestClient.get<boolean>('/system/menu/path-exists', {
-    params: { id, path },
-  });
 }
 
 /**
@@ -93,11 +77,4 @@ async function deleteMenu(id: string) {
   return requestClient.delete(`/system/menu/${id}`);
 }
 
-export {
-  createMenu,
-  deleteMenu,
-  getMenuList,
-  isMenuNameExists,
-  isMenuPathExists,
-  updateMenu,
-};
+export { createMenu, deleteMenu, getMenuList, updateMenu };

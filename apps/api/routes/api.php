@@ -15,10 +15,10 @@ Route::prefix('auth')->group(function () {
     Route::post('login', [AuthController::class, 'login'])->middleware('throttle:login');
     Route::post('refresh', [AuthController::class, 'refresh']);
     Route::post('logout', [AuthController::class, 'logout']);
-    Route::get('codes', [AuthController::class, 'codes'])->middleware('auth:sanctum');
+    Route::get('codes', [AuthController::class, 'codes'])->middleware('auth:sanctum', 'account.active');
 });
 
-Route::middleware('auth:sanctum')->group(function () {
+Route::middleware('auth:sanctum', 'account.active')->group(function () {
     Route::get('user/info', [AdminUserController::class, 'info']);
     // 个人中心：改自己的资料与密码，不需要系统管理权限
     Route::put('user/profile', [AdminUserController::class, 'updateProfile']);
@@ -29,8 +29,6 @@ Route::middleware('auth:sanctum')->group(function () {
     // 读操作只要求登录；写操作按按钮权限码校验（与前端 v-access:code 同源）
     Route::prefix('system')->group(function () {
         Route::get('menu/list', [SystemMenuController::class, 'index']);
-        Route::get('menu/name-exists', [SystemMenuController::class, 'nameExists']);
-        Route::get('menu/path-exists', [SystemMenuController::class, 'pathExists']);
         Route::post('menu', [SystemMenuController::class, 'store'])
             ->middleware('permission:System:Menu:Create');
         Route::put('menu/{menu}', [SystemMenuController::class, 'update'])
@@ -39,7 +37,6 @@ Route::middleware('auth:sanctum')->group(function () {
             ->middleware('permission:System:Menu:Delete');
 
         Route::get('dept/list', [SystemDeptController::class, 'index']);
-        Route::get('dept/name-exists', [SystemDeptController::class, 'nameExists']);
         Route::post('dept', [SystemDeptController::class, 'store'])
             ->middleware('permission:System:Dept:Create');
         Route::put('dept/{dept}', [SystemDeptController::class, 'update'])

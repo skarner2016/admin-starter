@@ -83,33 +83,6 @@ class SystemRbacTest extends TestCase
         $this->assertNull($button['path']);
     }
 
-    public function test_name_exists_excludes_self(): void
-    {
-        $this->actingAsUser('vben');
-        $menu = MenuModel::query()->where('name', 'SystemUser')->firstOrFail();
-
-        $this->getJson('/api/system/menu/name-exists?name=SystemUser')
-            ->assertOk()->assertJsonPath('data', true);
-
-        $this->getJson("/api/system/menu/name-exists?name=SystemUser&id={$menu->id}")
-            ->assertOk()->assertJsonPath('data', false);
-
-        $this->getJson('/api/system/menu/name-exists?name=NotExists')
-            ->assertOk()->assertJsonPath('data', false);
-    }
-
-    public function test_path_exists_ignores_self(): void
-    {
-        $this->actingAsUser('vben');
-        $menu = MenuModel::query()->where('name', 'SystemUser')->firstOrFail();
-
-        $this->getJson('/api/system/menu/path-exists?path=user')
-            ->assertOk()->assertJsonPath('data', true);
-
-        $this->getJson("/api/system/menu/path-exists?path=user&id={$menu->id}")
-            ->assertOk()->assertJsonPath('data', false);
-    }
-
     public function test_creating_button_menu_creates_permission(): void
     {
         $this->actingAsUser('vben');
@@ -147,6 +120,34 @@ class SystemRbacTest extends TestCase
         $this->assertDatabaseMissing('admin_permissions', ['name' => 'System:User:Create']);
     }
 
+    public function test_duplicate_auth_code_is_rejected(): void
+    {
+        $this->actingAsUser('vben');
+
+        // 新建按钮：与既有 SystemUserCreate 共用同一权限码
+        $this->postJson('/api/system/menu', [
+            'name' => 'SystemUserCreateDup',
+            'type' => 'button',
+            'authCode' => 'System:User:Create',
+            'pid' => '0',
+            'status' => 1,
+        ])->assertStatus(422);
+
+        // 改名撞车：把 SystemUserCreate 的权限码改成 SystemRoleDelete 已占用的码
+        $button = MenuModel::query()->where('name', 'SystemUserCreate')->firstOrFail();
+
+        $this->putJson("/api/system/menu/{$button->id}", [
+            'name' => 'SystemUserCreate',
+            'type' => 'button',
+            'authCode' => 'System:Role:Delete',
+            'pid' => (string) $button->pid,
+            'status' => 1,
+        ])->assertStatus(422);
+
+        // 权限仍在原处，未被误改
+        $this->assertDatabaseHas('admin_permissions', ['name' => 'System:User:Create']);
+    }
+
     public function test_deleting_button_menu_removes_permission_and_role_link(): void
     {
         $this->actingAsUser('vben');
@@ -168,6 +169,48 @@ class SystemRbacTest extends TestCase
             ->assertJsonPath('code', -1);
 
         $this->assertDatabaseHas('admin_menus', ['id' => $parent->id]);
+    }
+
+    public function test_menu_sort_is_persisted_and_exposed_as_meta_order(): void
+    {
+        $this->actingAsUser('vben');
+
+        $created = $this->postJson('/api/system/menu', [
+            'name' => 'SortedMenu',
+            'path' => '/sorted',
+            'type' => 'menu',
+            'status' => 1,
+            'sort' => 7,
+            'meta' => ['title' => 'sorted'],
+        ])->assertOk()->assertJsonPath('code', 0)->json('data');
+
+        // 排序落在 admin_menus.sort（权威来源），而不是只藏在 meta.order 里
+        $this->assertSame(7, $created['sort']);
+        $this->assertDatabaseHas('admin_menus', ['id' => $created['id'], 'sort' => 7]);
+
+        // 管理列表原样回显，供编辑抽屉回填
+        $node = collect($this->flatten(
+            $this->getJson('/api/system/menu/list')->assertOk()->json('data'),
+        ))->firstWhere('name', 'SortedMenu');
+        $this->assertSame(7, $node['sort']);
+
+        // 运行时菜单用 sort 覆盖 meta.order
+        $route = collect($this->flatten(
+            $this->getJson('/api/menu/all')->assertOk()->json('data'),
+        ))->firstWhere('name', 'SortedMenu');
+        $this->assertSame(7, $route['meta']['order']);
+
+        // 更新排序同样生效
+        $this->putJson("/api/system/menu/{$created['id']}", [
+            'name' => 'SortedMenu',
+            'path' => '/sorted',
+            'type' => 'menu',
+            'status' => 1,
+            'sort' => 3,
+            'meta' => ['title' => 'sorted'],
+        ])->assertOk()->assertJsonPath('data.sort', 3);
+
+        $this->assertDatabaseHas('admin_menus', ['id' => $created['id'], 'sort' => 3]);
     }
 
     // ===================== 角色 =====================
@@ -499,6 +542,22 @@ class SystemRbacTest extends TestCase
             ->assertJsonPath('code', 0);
     }
 
+    public function test_disabled_account_token_is_rejected(): void
+    {
+        $jack = AdminUserModel::query()->where('username', 'jack')->firstOrFail();
+        $tokens = app(AdminUserService::class)->issueTokens($jack);
+        $this->assertSame(2, $jack->tokens()->count());
+
+        // 直接改库停用，绕过 service 的吊销路径，模拟「令牌残留仍然有效」
+        $jack->update(['status' => 0]);
+
+        // 未吊销的 access token 也必须被 account.active 中间件拦下（而不是等到自然过期）
+        $this->withHeader('Authorization', "Bearer {$tokens['accessToken']}")
+            ->getJson('/api/user/info')
+            ->assertStatus(401)
+            ->assertJsonPath('message', '账号已被停用。');
+    }
+
     public function test_disabling_user_revokes_tokens(): void
     {
         $this->actingAsUser('vben');
@@ -541,6 +600,40 @@ class SystemRbacTest extends TestCase
 
         $this->postJson('/api/system/role', [
             'name' => 'temp-role',
+            'status' => 1,
+        ])->assertOk()->assertJsonPath('code', 0);
+    }
+
+    public function test_disabled_role_does_not_grant_write_access(): void
+    {
+        $this->actingAsUser('admin');
+
+        // 角色启用时：admin 有部门创建权限，写接口放行
+        $this->postJson('/api/system/dept', [
+            'name' => 'EnabledDept',
+            'pid' => '0',
+            'status' => 1,
+        ])->assertOk()->assertJsonPath('code', 0);
+
+        // 停用角色：不只看不到菜单/权限码，写接口也必须被拦下（spatie 默认不看角色 status）
+        RoleModel::findByName('admin', 'web')->update(['status' => 0]);
+
+        $this->assertSame([], $this->getJson('/api/auth/codes')->assertOk()->json('data'));
+
+        $this->postJson('/api/system/dept', [
+            'name' => 'DisabledDept',
+            'pid' => '0',
+            'status' => 1,
+        ])->assertStatus(403)->assertJsonPath('message', '没有该操作权限。');
+
+        $this->assertDatabaseMissing('admin_depts', ['name' => 'DisabledDept']);
+
+        // 重新启用后恢复写权限
+        RoleModel::findByName('admin', 'web')->update(['status' => 1]);
+
+        $this->postJson('/api/system/dept', [
+            'name' => 'ReenabledDept',
+            'pid' => '0',
             'status' => 1,
         ])->assertOk()->assertJsonPath('code', 0);
     }

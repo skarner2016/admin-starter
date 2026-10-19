@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Laravel\Sanctum\HasApiTokens;
+use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Traits\HasRoles;
 
 class AdminUserModel extends Authenticatable
@@ -40,5 +41,18 @@ class AdminUserModel extends Authenticatable
     public function dept(): BelongsTo
     {
         return $this->belongsTo(DeptModel::class, 'dept_id');
+    }
+
+    /**
+     * spatie 默认按「用户拥有的角色」判权，不看角色 status，会让停用角色
+     * 依旧通过 permission 中间件拿到写权限。这里收窄为只认启用角色，
+     * 与 AdminUserService::permissionCodesFor() / MenuService::menusForUser() 口径一致。
+     */
+    protected function hasPermissionViaRole(Permission $permission): bool
+    {
+        return $this->roles()
+            ->where('status', 1)
+            ->whereHas('permissions', fn ($query) => $query->whereKey($permission->getKey()))
+            ->exists();
     }
 }

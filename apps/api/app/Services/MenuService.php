@@ -29,22 +29,6 @@ class MenuService
         return $this->buildAdminTree(MenuModel::query()->orderBy('sort')->orderBy('id')->get(), 0);
     }
 
-    public function nameExists(string $name, ?int $excludeId = null): bool
-    {
-        return MenuModel::query()
-            ->where('name', $name)
-            ->when($excludeId, fn ($query) => $query->where('id', '!=', $excludeId))
-            ->exists();
-    }
-
-    public function pathExists(string $path, ?int $excludeId = null): bool
-    {
-        return MenuModel::query()
-            ->where('path', $path)
-            ->when($excludeId, fn ($query) => $query->where('id', '!=', $excludeId))
-            ->exists();
-    }
-
     public function create(array $data): MenuModel
     {
         return DB::transaction(function () use ($data) {

@@ -50,14 +50,15 @@ class AuthController extends Controller
     }
 
     /**
-     * 前端登出同样不携带 Bearer，只能靠 Cookie 定位并吊销 refresh token。
+     * 前端登出同样不携带 Bearer，只能靠 Cookie 里的 refresh token 定位登录会话，
+     * 再连带吊销该会话的 access token（见 AdminUserService::revokeSession）。
      */
     public function logout(Request $request): JsonResponse
     {
         $refreshToken = $request->cookie(AdminUserService::COOKIE_NAME);
 
         if ($refreshToken) {
-            $this->users->revokeRefresh($refreshToken);
+            $this->users->revokeSession($refreshToken);
         }
 
         return $this->successResponse('')->withCookie($this->forgetRefreshCookie());

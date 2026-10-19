@@ -125,7 +125,6 @@
 | POST | `/api/system/dept` | `System:Dept:Create` | 单节点 |
 | PUT | `/api/system/dept/{id}` | `System:Dept:Edit` | 单节点 |
 | DELETE | `/api/system/dept/{id}` | `System:Dept:Delete` | `data: ''` |
-| GET | `/api/system/dept/name-exists?name=&id=` | 登录 | `boolean` |
 
 - 入参：`{ name, pid?, sort?, status, remark? }`，`pid` 省略按 0 处理。
 - 出参 `id` / `pid` 一律**字符串**（与 `SystemMenuResource` 一致，vxe-table 树表的 `rowField` / `parentField` 依赖一致性）。
@@ -157,7 +156,7 @@
 
 **修改**
 
-- `routes/api.php`：新增 4 条部门路由 + 1 条 `name-exists`；写操作挂 `permission:System:Dept:*` 中间件
+- `routes/api.php`：新增 4 条部门路由；写操作挂 `permission:System:Dept:*` 中间件
 - `app/Services/AdminUserManageService.php`：`paginate()` 支持 `deptId` 子树过滤；`create()` / `update()` 写 `dept_id`
 - `app/Http/Requests/System/UserRequest.php`：`deptId` 校验
 - `app/Http/Resources/SystemUserResource.php`：输出 `deptId` / `deptName`
@@ -172,7 +171,7 @@
 
 **新增**
 
-- `apps/web-ele/src/api/system/dept.ts`：`SystemDeptApi` 命名空间（`SystemDept` 接口 + `MenuTypes` 式的类型约束）+ `getDeptList` / `createDept` / `updateDept` / `deleteDept` / `isDeptNameExists`
+- `apps/web-ele/src/api/system/dept.ts`：`SystemDeptApi` 命名空间（`SystemDept` 接口 + `MenuTypes` 式的类型约束）+ `getDeptList` / `createDept` / `updateDept` / `deleteDept`
 - `apps/web-ele/src/views/system/dept/index.vue`：树表页面（`useVbenVxeGrid` + `treeConfig` + 工具栏新增）
 - `apps/web-ele/src/views/system/dept/data.ts`：`useFormSchema()` / `useColumns()`
 - `apps/web-ele/src/views/system/dept/modules/form.vue`：抽屉表单（`useVbenDrawer`）
@@ -313,7 +312,7 @@ php artisan rbac:sync-permissions     # 派生三个按钮码；不加 --prune�
 
 ### 14.2 与计划的差异
 
-- 前端**不做**客户端异步唯一性校验，依赖后端 422 提示（与菜单页一致）；`isDeptNameExists` 已按契约导出但页面暂未调用（既有 `isMenuNameExists` / `isMenuPathExists` 同样未被页面调用）。
+- 前端**不做**客户端异步唯一性校验，依赖后端 422 提示（与菜单页一致）。原契约里的 `name-exists` 端点与 `isDeptNameExists` / `isMenuNameExists` / `isMenuPathExists` 前端包装均无调用方，已按「死代码清理」删除（服务端唯一性仍由 `DeptRequest` 闭包 / `MenuRequest` 的 `unique` 规则保证）。
 - 部门页未加搜索表单（部门树规模小，与菜单页一致）。
 
 ### 14.3 验证记录

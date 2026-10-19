@@ -209,7 +209,6 @@ function encode(values: Recordable<any>) {
   const meta: Recordable<any> = {
     title: values.metaTitle,
     icon: values.metaIcon || undefined,
-    order: Number(values.metaOrder ?? 0),
     keepAlive: values.metaKeepAlive,
     affixTab: values.metaAffixTab,
     hideInMenu: values.metaHideInMenu,
@@ -230,6 +229,8 @@ function encode(values: Recordable<any>) {
     path: values.path || null,
     pid: values.pid ? String(values.pid) : '0',
     redirect: null,
+    // 排序存 admin_menus.sort（权威来源），不要再塞进 meta.order
+    sort: Number(values.metaOrder ?? 0),
     status: values.status,
     type: values.type,
   };
@@ -247,7 +248,8 @@ function decode(data?: Recordable<any>) {
     metaHideInMenu: meta.hideInMenu ?? false,
     metaIcon: meta.icon ?? '',
     metaKeepAlive: meta.keepAlive ?? false,
-    metaOrder: meta.order ?? 0,
+    // 老数据可能只有 meta.order；新数据以 admin_menus.sort 为准
+    metaOrder: data?.sort ?? meta.order ?? 0,
     metaTitle: meta.title ?? '',
     name: data?.name ?? '',
     path: data?.path ?? '',

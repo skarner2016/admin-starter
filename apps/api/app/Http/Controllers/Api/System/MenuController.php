@@ -9,7 +9,6 @@ use App\Http\Resources\SystemMenuResource;
 use App\Models\MenuModel;
 use App\Services\MenuService;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 
 class MenuController extends Controller
 {
@@ -20,26 +19,6 @@ class MenuController extends Controller
     public function index(): JsonResponse
     {
         return $this->successResponse($this->menus->tree());
-    }
-
-    public function nameExists(Request $request): JsonResponse
-    {
-        return $this->successResponse(
-            $this->menus->nameExists(
-                (string) $request->query('name', ''),
-                $this->queryId($request),
-            ),
-        );
-    }
-
-    public function pathExists(Request $request): JsonResponse
-    {
-        return $this->successResponse(
-            $this->menus->pathExists(
-                (string) $request->query('path', ''),
-                $this->queryId($request),
-            ),
-        );
     }
 
     public function store(MenuRequest $request): JsonResponse
@@ -79,15 +58,9 @@ class MenuController extends Controller
             'redirect' => $data['redirect'] ?? null,
             'type' => $data['type'],
             'auth_code' => $data['authCode'] ?? null,
+            'sort' => (int) ($data['sort'] ?? 0),
             'status' => (int) $data['status'],
             'meta' => $data['meta'] ?? null,
         ];
-    }
-
-    private function queryId(Request $request): ?int
-    {
-        $value = $request->query('id');
-
-        return is_numeric($value) ? (int) $value : null;
     }
 }

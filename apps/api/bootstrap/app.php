@@ -1,6 +1,7 @@
 <?php
 
 use App\Exceptions\ApiExceptionHandler;
+use App\Http\Middleware\EnsureAccountIsActive;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -24,6 +25,8 @@ return Application::configure(basePath: dirname(__DIR__))
         // spatie 的权限中间件在 routes 里以 permission:xxx 使用
         $middleware->alias([
             'permission' => PermissionMiddleware::class,
+            // 账号状态兜底：必须排在 auth:sanctum 之后（否则 $request->user() 还是 null）
+            'account.active' => EnsureAccountIsActive::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

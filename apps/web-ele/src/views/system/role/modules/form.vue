@@ -61,9 +61,8 @@ const [Drawer, drawerApi] = useVbenDrawer<null | SystemRoleApi.SystemRole>({
     formData.value = data ?? undefined;
     id.value = data?.id;
 
-    if (menuTree.value.length === 0) {
-      await loadMenus();
-    }
+    // 每次都重新拉取：菜单可能在本页面打开期间被其它标签页改动
+    await loadMenus();
 
     await nextTick();
 
@@ -76,7 +75,7 @@ const [Drawer, drawerApi] = useVbenDrawer<null | SystemRoleApi.SystemRole>({
 });
 
 function checkedKeys(): string[] {
-  return (treeRef.value?.getCheckedKeys() ?? []).map((key) => String(key));
+  return (treeRef.value?.getCheckedKeys() ?? []).map(String);
 }
 
 async function loadMenus() {

@@ -107,6 +107,43 @@ class AuthLoginTest extends TestCase
         ])->assertStatus(423)->assertJsonPath('code', 423);
     }
 
+    public function test_probing_a_locked_account_does_not_extend_the_lock_window(): void
+    {
+        // t=0：直接写入 5 条真实失败日志（绕过登录接口自身的限流，聚焦锁定逻辑）
+        foreach (range(1, AdminUserService::MAX_FAILED_ATTEMPTS) as $ignored) {
+            LoginLogModel::query()->create([
+                'username' => 'vben',
+                'success' => false,
+                'reason' => 'invalid_credentials',
+                'created_at' => now(),
+            ]);
+        }
+
+        $this->postJson('/api/auth/login', [
+            'username' => 'vben',
+            'password' => '123456',
+        ])->assertStatus(423);
+
+        // t=14：仍在锁定期内，持续探测（每次都被锁定拦下）
+        $this->travel(AdminUserService::LOCK_MINUTES - 1)->minutes();
+
+        foreach (range(1, AdminUserService::MAX_FAILED_ATTEMPTS) as $ignored) {
+            $this->postJson('/api/auth/login', [
+                'username' => 'vben',
+                'password' => '123456',
+            ])->assertStatus(423);
+        }
+
+        // t=16：距最初的真实失败已超过 15 分钟。
+        // 被锁定拦下的尝试只是审计记录，不能把窗口续期，否则攻击者可以永久锁死账号。
+        $this->travel(2)->minutes();
+
+        $this->postJson('/api/auth/login', [
+            'username' => 'vben',
+            'password' => '123456',
+        ])->assertOk();
+    }
+
     public function test_successful_login_resets_the_failure_window(): void
     {
         foreach (range(1, AdminUserService::MAX_FAILED_ATTEMPTS) as $ignored) {

@@ -9,7 +9,6 @@ use App\Http\Resources\SystemDeptResource;
 use App\Models\DeptModel;
 use App\Services\DeptService;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 
 class DeptController extends Controller
 {
@@ -20,19 +19,6 @@ class DeptController extends Controller
     public function index(): JsonResponse
     {
         return $this->successResponse($this->depts->tree());
-    }
-
-    public function nameExists(Request $request): JsonResponse
-    {
-        $pid = $request->query('pid');
-
-        return $this->successResponse(
-            $this->depts->nameExists(
-                (string) $request->query('name', ''),
-                is_numeric($pid) ? (int) $pid : 0,
-                $this->queryId($request),
-            ),
-        );
     }
 
     public function store(DeptRequest $request): JsonResponse
@@ -62,12 +48,5 @@ class DeptController extends Controller
         $this->depts->delete($dept);
 
         return $this->successResponse('');
-    }
-
-    private function queryId(Request $request): ?int
-    {
-        $value = $request->query('id');
-
-        return is_numeric($value) ? (int) $value : null;
     }
 }

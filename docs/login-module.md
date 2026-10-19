@@ -10,7 +10,8 @@
 > - 2026-10-17 修订一：登录账号改用独立的 `admin_users` 表（模型 `AdminUserModel`）；`laravel-permission` 表名加 `admin_` 前缀；统一响应改为 Trait（`app/Helpers/Traits/ApiResponseTrait.php`）。
 > - 2026-10-17 修订二：`admin_users` 去掉 `email`、新增 `real_name`；`homePath` 改为后端统一返回常量。
 > - 2026-10-17 修订三：登录账号列名定为 `username`（与前端请求/响应同名，零转换）。
-> - 2026-10-17 修订四（本版）：**`accessMode` 定为 `backend`，前端菜单由后端动态返回**（新增 `admin_menus` 表与 `/menu/all`，需前端改 `preferences.ts` 一处）；`admin_login_logs` 本期做；删除 `dept_id`；`homePath` 硬编码不写配置；`desc` 改名 `description`；数据库定为 MySQL + Redis；`AdminUserService` + `AdminUserController`；`personal_access_tokens` 加前缀；删除 `password_reset_tokens`。
+> - 2026-10-17 修订四：**`accessMode` 定为 `backend`，前端菜单由后端动态返回**（新增 `admin_menus` 表与 `/menu/all`，需前端改 `preferences.ts` 一处）；`admin_login_logs` 本期做；删除 `dept_id`；`homePath` 硬编码不写配置；`desc` 改名 `description`；数据库定为 MySQL + Redis；`AdminUserService` + `AdminUserController`；`personal_access_tokens` 加前缀；删除 `password_reset_tokens`。
+> - 2026-10-18 修订五（本版）：access / refresh 写入同一 `session_id`，**logout 即时吊销整条会话**（§4.2、§6.4）；**refresh 校验账号 `status`**，停用即拒绝续期并清理残留令牌；新增 `account.active` 中间件对已认证请求复核 `status`（§8.5）。旧「只能吊销 refresh」的结论作废。
 
 本文档为评审存档。`docs/` 目录为 VitePress 文档包，其 `srcDir` 为 `src`，故本文件不会被发布到文档站。
 
@@ -26,7 +27,7 @@
 
 **目标**：在 `apps/api` 中实现登录模块，并让**前端菜单由后端动态返回**，严格满足 `apps/web-ele` 的接口契约。
 
-**关键结论（先看这条）**：登录凭据为 **`username`**（列名、请求参数、响应字段三者同名，后端零转换）；账号存于独立的 `admin_users` 表；菜单由 `admin_menus` 表驱动、经 `/menu/all` 下发（`accessMode` 切 `backend`，需前端改 `preferences.ts` 一处）；`super` 角色**必须显式拿到全量权限码**（vben 5.x 无 super 豁免）；access 令牌短时效 + 管理员操作即时吊销 refresh。
+**关键结论（先看这条）**：登录凭据为 **`username`**（列名、请求参数、响应字段三者同名，后端零转换）；账号存于独立的 `admin_users` 表；菜单由 `admin_menus` 表驱动、经 `/menu/all` 下发（`accessMode` 切 `backend`，需前端改 `preferences.ts` 一处）；`super` 角色**必须显式拿到全量权限码**（vben 5.x 无 super 豁免）；access / refresh 按 `session_id` 组成登录会话，登出或管理员操作可即时吊销（见 §6.4、§8.5）。
 
 ---
 
@@ -108,7 +109,7 @@ export const overridesPreferences = defineOverridesPreferences({
 
 ### 4.1 为什么不用 JWT
 
-旧 mock 用 JWT。但前端登出走 Cookie、**不携带 Bearer**（见 §6.4），吊销 refresh 是唯一手段，而 JWT 无法即时吊销。Sanctum 的 opaque token 天然可吊销，且 `expires_at` 能表达短时效，故弃 JWT。
+旧 mock 用 JWT。但前端登出走 Cookie、**不携带 Bearer**（见 §6.4），后端只能靠落库的令牌记录定位并吊销，而 JWT 无法即时吊销。Sanctum 的 opaque token 天然可吊销，且 `expires_at` 能表达短时效，故弃 JWT。
 
 ### 4.2 令牌模型
 
@@ -117,7 +118,9 @@ export const overridesPreferences = defineOverridesPreferences({
 - **access**：ability `access`，TTL **60 分钟**。
 - **refresh**：ability `refresh`，TTL **7 天**，写 HttpOnly Cookie。
 
-刷新时校验 refresh token 的 ability 与 `expires_at`，**轮换**（删除旧 refresh、签发新 refresh、换发新 access），可检测重放。
+两者写入同一 `session_id`（`admin_personal_access_tokens.session_id`，UUID）标记为**同一次登录会话**；refresh 轮换时沿用原 `session_id`。登出凭 Cookie 里的 refresh token 定位会话，即可连带吊销同会话的 access token（见 §6.4）。
+
+刷新时校验 refresh token 的 ability 与 `expires_at`，**轮换**（删除旧 refresh、签发新 refresh、换发新 access），可检测重放；**并校验账号 `status`**——账号被停用后拒绝刷新并清理其残留令牌。
 
 ### 4.3 菜单来源：`accessMode` 定为 `backend`（已决策）
 
@@ -205,8 +208,9 @@ export const overridesPreferences = defineOverridesPreferences({
 ### 6.4 `POST /api/auth/logout`
 
 - **前端同样不携带 Bearer**（走 `baseRequestClient`）→ 只能靠 Cookie 定位用户。
-- 成功：`200` 统一包（`data: ''`），清除 Cookie 并吊销该 refresh token。
-- 说明：access token 未被出示、无法按值吊销，故 **access TTL 短（60 分钟）** 是安全兜底。彻底登出可额外吊销该用户全部 `access` ability token，代价是其它设备也被登出 —— 建议本期只吊销 refresh。
+- 成功：`200` 统一包（`data: ''`），清除 Cookie 并吊销**整个登录会话**（`session_id` 相同的 access + refresh 一起删）。
+- 说明：access token 虽未被出示，但它与 Cookie 里的 refresh token 共享 `session_id`，因此**能即时吊销**，不必再依赖 60 分钟 TTL 兜底。吊销粒度是会话级：只影响本次登录，其它设备的会话不受影响（见 §8.5）。
+- 迁移前签发、没有 `session_id` 的老令牌退化为只吊销 refresh 自身。
 
 ### 6.5 `GET /api/user/info`（需 `auth:sanctum`）
 
@@ -392,7 +396,7 @@ final class ApiExceptionHandler
 
 1. 顺序：查 `admin_users.username` → `Hash::check` → 校验 `status` → 签发令牌。失败统一返回模糊信息，不泄露"用户是否存在"。
 2. 限流：`RateLimiter::for('login', fn ($r) => Limit::perMinute(5)->by($r->input('username').$r->ip()))`，路由挂 `throttle:login`。
-3. **失败锁定：连续 5 次失败锁定 15 分钟**（叠加在限流之上），锁定期间返回 `423`。失败次数基于 `admin_login_logs` 统计。
+3. **失败锁定：连续 5 次失败锁定 15 分钟**（叠加在限流之上），锁定期间返回 `423`。失败次数基于 `admin_login_logs` 统计，**锁定期间被拦下的尝试（`reason=locked`）只记审计日志、不计入阈值** —— 否则攻击者持续探测就能把 15 分钟窗口不断右移，把账号永久锁死（DoS）。
 
 ### 8.3 登录审计日志（本期做）
 
@@ -403,11 +407,16 @@ final class ApiExceptionHandler
 - Cookie 名 `vben_refresh_token`；`httpOnly=true`、`path=/`、`maxAge=7d`。
   - dev（同源经 Vite 代理）：`secure=false, sameSite=lax`。
   - 跨域生产：`secure=true, sameSite=none`。
-- CORS：Laravel 12 内置（`config/cors.php` + `HandleCors`）。开发走 Vite 代理属同源，不触发；生产跨域需 `supports_credentials=true` 且 `allowed_origins` 写明确域名（**不能用 `*`**）。
+- CORS：Laravel 12 slim 默认不发布 `config/cors.php`（框架内置默认值 = `allowed_origins: *` + `supports_credentials: false`，浏览器会拒绝「带凭据 + `*`」的组合）。本项目已补 `config/cors.php`：`supports_credentials=true`、`allowed_origins` 从 `CORS_ALLOWED_ORIGINS` 读取（英文逗号分隔，回退到本地前端 5777 端口），生产部署必须把该变量设为前端真实域名（**不能用 `*`**）。开发走 Vite 代理属同源，不触发 CORS。
 
 ### 8.5 会话吊销（后台刚需）
 
-管理员**禁用账号 / 重置密码 / 改角色**时，吊销该用户全部 refresh token，即时生效。本期由 `AdminUserService` 提供吊销方法并测试覆盖；管理入口在后续用户管理模块。
+- **登出**：按 `session_id` 吊销该会话全部令牌（access + refresh），秒级生效，不影响其它设备。
+- **管理员禁用账号 / 重置密码**：`AdminUserService::revokeAllTokens()` 吊销该用户全部令牌（access + refresh）。
+- **刷新时校验 `status`**：账号被停用后 `/auth/refresh` 直接 401 并清理残留令牌，避免"禁用后仍能续期"。
+- **请求级兜底**：所有 `auth:sanctum` 路由紧跟 `account.active` 中间件（`EnsureAccountIsActive`），`status !== 1` 的账号一律 401。即使令牌因直接改库等原因残留未删，也不会漏放。
+
+由 `AdminUserService` 提供吊销方法并测试覆盖；管理入口见用户管理模块。
 
 ### 8.6 令牌清理
 
@@ -443,7 +452,8 @@ final class ApiExceptionHandler
 
 - 密码 bcrypt（`BCRYPT_ROUNDS=12` 已有）；refresh token 在 DB 中只存哈希（Sanctum 天然如此）。
 - refresh **轮换 + 重放检测**：旧 token 再次使用即失效并（可选）吊销该用户全部会话。
-- 登录限流 + 失败锁定（5 次 / 15 分钟）；access TTL 60 分钟；logout 清除 Cookie 并吊销 refresh。
+- 登录限流 + 失败锁定（5 次 / 15 分钟）；access TTL 60 分钟；logout 清除 Cookie 并吊销该会话的 access + refresh（按 `session_id`）。
+- **`account.active` 中间件**对每个已认证请求复核账号 `status`：停用立即失效，不依赖"停用时吊销令牌"这一入口。
 - Cookie `HttpOnly`，生产 `Secure + SameSite=None`。
 - 登录审计日志（§8.3）覆盖成功/失败与来源 IP/UA。
 - ⚠️ Seeder 含弱口令演示账号（`123456`），**本期不加环境守卫**，投产前必须处理（见 §14 待确认三）。
@@ -468,6 +478,7 @@ apps/api/
 │   │   ├── Controllers/Api/AuthController.php       # login/refresh/logout/codes
 │   │   ├── Controllers/Api/AdminUserController.php  # info
 │   │   ├── Controllers/Api/MenuController.php       # all
+│   │   ├── Middleware/EnsureAccountIsActive.php     # 别名 account.active：停用账号 401
 │   │   ├── Requests/Auth/LoginRequest.php           # FormRequest 校验（读 username）
 │   │   ├── Resources/AdminUserResource.php          # /user/info 出参 + 硬编码 homePath
 │   │   └── Resources/MenuResource.php               # /menu/all 出参（路由树）
@@ -489,8 +500,10 @@ Feature 测试用 `RefreshDatabase`（MySQL 测试库或 sqlite in-memory）：
 - 登录成功 / 密码错 / 账号禁用 / 账号锁定（均以 `username` 提交）；
 - `/auth/codes` 与 `/user/info` 未鉴权返回 401；
 - refresh 成功、轮换后旧 token 失效、重放被拒；
-- logout 清 Cookie 并吊销 refresh；
-- 限流 429、失败锁定 423；
+- logout 清 Cookie 并吊销该会话的 access + refresh；只影响本会话；
+- refresh 拒绝已停用账号，并清理其残留令牌；
+- 停用账号后，未吊销的 access token 访问受保护接口返回 401（`account.active`）；
+- 限流 429、失败锁定 423；锁定期间持续探测不会延长锁定窗口（防账号 DoS）；
 - `/user/info` 返回硬编码 `homePath` 常量；
 - **`/menu/all`：树形结构、`type=button` 与 `status=0` 被过滤、按角色过滤、`super` 拿全量、每个节点都有 `name`**；
 - `admin_login_logs` 成功/失败均落库；
@@ -533,7 +546,7 @@ Feature 测试用 `RefreshDatabase`（MySQL 测试库或 sqlite in-memory）：
 | `desc` 字段 | 改名 **`description`**，供用户列表展示备注 |
 | Seeder 环境守卫 | 本期不处理 |
 | access / refresh TTL | **60 分钟 / 7 天** |
-| 登录失败锁定 | **连续 5 次锁 15 分钟** |
+| 登录失败锁定 | **连续 5 次锁 15 分钟**（锁定期间的探测不计入阈值，窗口自「最后一次真实失败」起算） |
 | 数据库 | **MySQL + Redis** |
 | Service / Controller 命名 | **`AdminUserService`** / **`AdminUserController`** |
 | `personal_access_tokens` 前缀 | **加前缀** → `admin_personal_access_tokens` |
@@ -571,4 +584,4 @@ Feature 测试用 `RefreshDatabase`（MySQL 测试库或 sqlite in-memory）：
 - **`accessMode` 切 `backend` 后菜单完全依赖 `/menu/all`**：该接口挂掉会导致无菜单可显示。`component` 路径写错会静默回退到 not-found 页（仅 console 报错），上线前需逐个核对。
 - `/auth/refresh` 返回裸 token 是前端硬约束，**不要**给它套响应包，否则刷新链路静默失效。
 - Seeder 含弱口令演示账号，投产前必须处理（§14.1 第三条）。
-- 若后续前端改为携带 Bearer 调 logout，可升级为即时吊销 access。
+- logout 的 access 即时吊销依赖 `session_id`，因此**新增迁移必须在部署时执行**（`2026_10_18_100000_add_session_id_to_admin_personal_access_tokens_table`）；迁移前签发的老令牌退化为只吊销 refresh。

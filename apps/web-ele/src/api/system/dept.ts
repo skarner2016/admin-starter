@@ -28,17 +28,6 @@ async function getDeptList() {
 }
 
 /**
- * 同级下部门名是否已存在
- */
-async function isDeptNameExists(params: {
-  id?: string;
-  name: string;
-  pid?: string;
-}) {
-  return requestClient.get<boolean>('/system/dept/name-exists', { params });
-}
-
-/**
  * 创建部门
  */
 async function createDept(
@@ -64,4 +53,4 @@ async function deleteDept(id: string) {
   return requestClient.delete(`/system/dept/${id}`);
 }
 
-export { createDept, deleteDept, getDeptList, isDeptNameExists, updateDept };
+export { createDept, deleteDept, getDeptList, updateDept };

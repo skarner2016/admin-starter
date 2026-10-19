@@ -110,18 +110,77 @@ class AuthTokenTest extends TestCase
             ->assertStatus(401);
     }
 
-    public function test_revoke_all_refresh_tokens_invalidates_sessions(): void
+    public function test_logout_revokes_the_paired_access_token(): void
+    {
+        $session = $this->login();
+
+        $this->withRefreshCookie($session['refreshToken'])
+            ->postJson('/api/auth/logout')
+            ->assertOk();
+
+        // access 与 refresh 同属一个会话，登出后必须一起消失
+        $this->assertSame(
+            0,
+            AdminUserModel::query()->where('username', 'vben')->firstOrFail()->tokens()->count(),
+        );
+
+        // 登出后 access token 必须立即失效，而不是拖到自然过期
+        $this->withHeader('Authorization', "Bearer {$session['accessToken']}")
+            ->getJson('/api/user/info')
+            ->assertStatus(401);
+    }
+
+    public function test_logout_only_revokes_its_own_session(): void
+    {
+        $first = $this->login();
+        $second = $this->login();
+
+        $this->withRefreshCookie($first['refreshToken'])
+            ->postJson('/api/auth/logout')
+            ->assertOk();
+
+        // 另一个登录会话的 access token 不应被牵连
+        $this->withHeader('Authorization', "Bearer {$second['accessToken']}")
+            ->getJson('/api/user/info')
+            ->assertOk();
+    }
+
+    public function test_refresh_rotates_within_the_same_session(): void
+    {
+        $session = $this->login();
+
+        $response = $this->withRefreshCookie($session['refreshToken'])
+            ->postJson('/api/auth/refresh')
+            ->assertOk();
+
+        $rotatedAccessToken = trim($response->getContent());
+        $rotatedRefreshToken = $response->getCookie(AdminUserService::COOKIE_NAME, false)->getValue();
+
+        // 轮换后仍属同一会话：用新 refresh 登出也要能吊销新 access
+        $this->withRefreshCookie($rotatedRefreshToken)
+            ->postJson('/api/auth/logout')
+            ->assertOk();
+
+        $this->withHeader('Authorization', "Bearer {$rotatedAccessToken}")
+            ->getJson('/api/user/info')
+            ->assertStatus(401);
+    }
+
+    public function test_refresh_rejects_disabled_account_and_revokes_tokens(): void
     {
         $session = $this->login();
         $user = AdminUserModel::query()->where('username', 'vben')->firstOrFail();
 
-        $revoked = app(AdminUserService::class)->revokeAllRefreshTokens($user);
-
-        $this->assertGreaterThan(0, $revoked);
+        // 直接改库，模拟「账号已停用但令牌没被清理」的情形（service 的停用路径会吊销令牌）
+        $user->update(['status' => 0]);
 
         $this->withRefreshCookie($session['refreshToken'])
             ->postJson('/api/auth/refresh')
-            ->assertStatus(401);
+            ->assertStatus(401)
+            ->assertJsonPath('code', 401);
+
+        // 残留令牌被一并清理，不能再被反复用来刷新
+        $this->assertSame(0, $user->tokens()->count());
     }
 
     public function test_tokens_are_stored_in_prefixed_table(): void

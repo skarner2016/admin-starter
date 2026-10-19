@@ -23,6 +23,8 @@ class SystemMenuResource extends JsonResource
             'authCode' => $this->auth_code,
             'redirect' => $this->redirect,
             'status' => (int) $this->status,
+            // 排序的权威来源是 admin_menus.sort；运行时 menu.all 会把它映射到 meta.order
+            'sort' => (int) $this->sort,
             'meta' => $this->meta ?? [],
         ];
     }

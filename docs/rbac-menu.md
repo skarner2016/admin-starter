@@ -61,7 +61,7 @@ playground 的适配器里这三个都有（`playground/src/adapter/vxe-table.ts
 ### 3.1 本阶段做
 
 1. **数据层调整**：`admin_menus` 补 `redirect` 列、`type` 扩到 5 种；`admin_roles` 补 `remark` / `status`。
-2. **菜单管理接口**：`list` / `name-exists` / `path-exists` / `create` / `update` / `delete`。
+2. **菜单管理接口**：`list` / `create` / `update` / `delete`。
 3. **角色管理接口**：`list` / `create` / `update` / `delete`（含"授权"读写）。
 4. **用户管理接口**：`list` / `create` / `update` / `delete`（含角色分配、重置密码）。
 5. **权限桥接**：角色授权（menu id 集合）→ `admin_role_menu` + spatie permissions 同步。
@@ -157,8 +157,6 @@ spatie 的 `roles` 表可以自由加列，不影响其功能。
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | GET | `/system/menu/list` | 返回**树**，含全部 `type`（含 button）与 `status=0`；字段 `id,pid,name,path,component,type,authCode,redirect,status,meta,children` |
-| GET | `/system/menu/name-exists` | `?name=&id=` → `boolean`（`id` 用于编辑时排除自身） |
-| GET | `/system/menu/path-exists` | `?path=&id=` → `boolean` |
 | POST | `/system/menu` | 创建 |
 | PUT | `/system/menu/{id}` | 更新 |
 | DELETE | `/system/menu/{id}` | 删除；**存在子级时拒绝**（返回业务错误） |
@@ -186,7 +184,7 @@ spatie 的 `roles` 表可以自由加列，不影响其功能。
 | DELETE | `/system/user/{id}` | 删除；**不能删自己**、**不能删最后一个 super** |
 | PUT | `/system/user/{id}/password` | 重置密码（建议；前端需配套按钮） |
 
-> 禁用账号 / 重置密码 / 改角色时，复用第一步已实现的 `AdminUserService::revokeAllRefreshTokens()` 即时踢下线（§8.5 of login-module）。
+> 禁用账号 / 重置密码 / 改角色时，复用第一步已实现的 `AdminUserService::revokeAllTokens()` 即时踢下线（§8.5 of login-module）。
 
 ### 6.4 保持不变的接口
 
@@ -264,7 +262,7 @@ System (catalog, /system)                      → 目录
 4. **删除的级联与保护**：
    - 删菜单：有子级拒绝；同时清理 `admin_role_menu` 引用、删除对应 permission（按钮行）。
    - 删角色：有用户绑定拒绝；清理 `admin_role_menu` + spatie `role_has_permissions`。
-   - 删用户：清理其 token（`revokeAllRefreshTokens`）与 `model_has_roles`。
+   - 删用户：清理其 token（`revokeAllTokens`）与 `model_has_roles`。
 5. **`super` 保护**：不允许删除/停用 `super` 角色，不允许删除最后一个 `super` 用户（否则系统无法再授权）。
 6. **创建/更新角色、菜单、用户**一律走 FormRequest 校验；出参一律走 Resource（统一字符串 id）。
 7. **缓存**：spatie 有权限缓存，角色/权限变更后需 `permission:cache-reset`（spatie 的 `syncPermissions` 内部会处理，但自定义命令里要显式调用）。
@@ -275,7 +273,7 @@ System (catalog, /system)                      → 目录
 
 沿用 `RefreshDatabase` + `seed()`：
 
-- **菜单**：树形结构、`name-exists`/`path-exists` 含自身排除、创建/更新/删除、删父级被拒、按钮行过滤只影响 `/menu/all` 不影响 `/system/menu/list`。
+- **菜单**：树形结构、创建/更新/删除、删父级被拒、按钮行过滤只影响 `/menu/all` 不影响 `/system/menu/list`、`authCode` 全局唯一（新建与改名撞车都拒绝）。
 - **角色**：分页形状 `{items,total}`、创建带 `permissions`（menu id）后 `admin_role_menu` 与 spatie 权限**双写一致**、删除有用户绑定时被拒、`super` 不可删。
 - **用户**：分页、创建/更新/删除、角色分配、重置密码后旧 refresh token 失效、不能删自己、不能删最后一个 super。
 - **端到端一致性**：给角色勾选某按钮菜单 → 该角色用户 `/auth/codes` 立即包含对应 `auth_code`（验证 §4.1 的桥接）。

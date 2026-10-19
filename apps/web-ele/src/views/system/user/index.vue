@@ -24,6 +24,7 @@ import {
 
 import { useColumns, useGridFormSchema } from './data';
 import Form from './modules/form.vue';
+import { buildUserStatusTogglePayload } from './payload';
 
 const [FormDrawer, formDrawerApi] = useVbenDrawer({
   connectedComponent: Form,
@@ -87,7 +88,7 @@ function onActionClick({
 }
 
 async function onStatusChange(
-  newStatus: number,
+  newStatus: SystemUserApi.SystemUser['status'],
   row: SystemUserApi.SystemUser,
 ) {
   const label = newStatus === 1 ? $t('common.enabled') : $t('common.disabled');
@@ -98,15 +99,7 @@ async function onStatusChange(
       $t('system.user.status'),
       { type: 'warning' },
     );
-    await updateUser(row.id, {
-      // 后端 update 是全量覆盖，漏传 deptId 会把用户部门清空
-      deptId: row.deptId ?? '',
-      description: row.description,
-      realName: row.realName,
-      roles: row.roles ?? [],
-      status: newStatus,
-      username: row.username,
-    });
+    await updateUser(row.id, buildUserStatusTogglePayload(row, newStatus));
     return true;
   } catch {
     return false;

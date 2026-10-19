@@ -147,27 +147,6 @@ class SystemDeptTest extends TestCase
         ])->assertOk()->assertJsonPath('code', 0);
     }
 
-    public function test_dept_name_exists_endpoint_is_scoped_to_same_parent(): void
-    {
-        $this->actingAsUser('vben');
-        $root = $this->dept('总公司');
-        $market = $this->dept('市场部');
-        $dev = $this->dept('研发部');
-
-        // 中文必须按浏览器的方式编码进 query，直接拼裸中文会被 URI 处理破坏
-        $query = fn (array $params) => '/api/system/dept/name-exists?'.http_build_query($params);
-
-        $this->getJson($query(['name' => '研发部', 'pid' => (string) $root->id]))
-            ->assertOk()->assertJsonPath('data', true);
-
-        $this->getJson($query(['name' => '研发部', 'pid' => (string) $market->id]))
-            ->assertOk()->assertJsonPath('data', false);
-
-        // 排除自身（编辑回显场景）
-        $this->getJson($query(['name' => '研发部', 'pid' => (string) $root->id, 'id' => (string) $dev->id]))
-            ->assertOk()->assertJsonPath('data', false);
-    }
-
     public function test_delete_dept_with_children_is_rejected(): void
     {
         $this->actingAsUser('vben');

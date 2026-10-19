@@ -18,10 +18,11 @@ import { useFormSchema } from '../data';
 
 const emits = defineEmits(['success']);
 
-const formData = ref<SystemUserApi.SystemUser>();
 const id = ref<string>();
 
 async function roleOptions() {
+  // 角色列表为分页接口（pageSize 上限 200，也是后端允许的最大值）：
+  // 超过 200 个角色时下拉会被截断，需要「全量角色」接口才能彻底解决。
   const { items } = await getRoleList({ page: 1, pageSize: 200 });
 
   return items.map((role) => ({ label: role.name, value: role.name }));
@@ -81,7 +82,6 @@ const [Drawer, drawerApi] = useVbenDrawer<null | SystemUserApi.SystemUser>({
 
     const data = drawerApi.getData();
     formApi.reset();
-    formData.value = data ?? undefined;
     id.value = data?.id;
 
     await nextTick();
